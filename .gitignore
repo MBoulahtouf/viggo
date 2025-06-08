@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE files
+.idea/
+.vscode/
+
+# Poetry
+.venv/
+
+# Data
+The_Name_of_the_Rose_Umberto_Eco.pdf
+
+# Tests
+test_graph.py
