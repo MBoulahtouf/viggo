@@ -37,7 +37,7 @@ Follow these instructions to get a local copy up and running for development and
 
 1.  **Clone the repository:**
     ```sh
-    git clone <your-repo-url>
+    git clone MBoulahtouf/strider
     cd strider
     ```
 2.  **Install dependencies:**

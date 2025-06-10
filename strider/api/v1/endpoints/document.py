@@ -33,17 +33,32 @@ async def upload_document(file: UploadFile = File(...)):
     # Build RAG Index
     state.vector_index, state.all_chunks_with_metadata = rag_service.build_rag_index(state.document_store)
 
-    # Build Knowledge Graph
-    nodes_added, rels_added = graph_service.extract_and_load_graph(state.document_store)
+    # Knowledge Graph & Feature Population
+    print("Starting fast graph and feature extraction...")
+    nodes_added, rels_added, journeys = graph_service.extract_graph_and_features(state.document_store)
+
+    # Store the character journeys
+    state.document_metadata['character_journeys'] = journeys
     
+    print(f"Graph populated: {nodes_added} nodes, {rels_added} relationships.")
+    print(f"Character journeys tracked for {len(journeys)} characters.")
+    
+     
+
     return {
         **state.document_metadata,
         "rag_chunks_indexed": state.vector_index.ntotal,
         "graph_nodes_added": nodes_added,
         "graph_relationships_added": rels_added,
-        "message": "Document processed."
+        "message": "Document processed.RAG, Graph, and Character Journeys are readu."
     }
-
+    
+    
+"""
+    # Build Knowledge Graph
+    nodes_added, rels_added = graph_service.extract_and_load_graph(state.document_store)
+"""    
+    
 @router.get("/info", response_model=DocumentInfoResponse)
 async def get_document_info():
     if not state.document_metadata:
