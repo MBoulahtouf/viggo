@@ -33,6 +33,19 @@ class RAGService:
         # For now, it returns all pages as content pages
         return all_pages_data
 
+    def extract_relationships(self, doc: spacy.tokens.doc.Doc) -> List[Dict]:
+        relationships = []
+        for sent in doc.sents:
+            entities = sent.ents
+            for i in range(len(entities)):
+                for j in range(i + 1, len(entities)):
+                    relationships.append({
+                        "source": entities[i].text,
+                        "target": entities[j].text,
+                        "type": "RELATED_TO"
+                    })
+        return relationships
+
     def build_rag_index(self, document_store: List[Dict]) -> Tuple[int, IndexFlatL2, List[Dict]]:
         self.documents = []
         self.all_chunks_with_metadata = []
@@ -40,27 +53,31 @@ class RAGService:
         for doc_page in document_store:
             text = doc_page['content']
             doc = self.nlp(text)
-            sentences = [sent.text for sent in doc.sents]
+            sentences = [sent for sent in doc.sents]
             
             current_chunk = ""
             for sentence in sentences:
-                if len(current_chunk) + len(sentence) < 500: # Keep chunks under 500 characters
-                    current_chunk += " " + sentence
+                if len(current_chunk) + len(sentence.text) < 500: # Keep chunks under 500 characters
+                    current_chunk += " " + sentence.text
                 else:
                     if current_chunk:
-                        # Extract entities for the current chunk
+                        # Extract entities and relationships for the current chunk
                         chunk_doc = self.nlp(current_chunk.strip())
                         entities = [{"text": ent.text, "label": ent.label_} for ent in chunk_doc.ents]
+                        relationships = self.extract_relationships(chunk_doc)
                         print(f"[DEBUG] Extracted entities for chunk (page {doc_page.get('page')}): {entities}")
+                        print(f"[DEBUG] Extracted relationships for chunk (page {doc_page.get('page')}): {relationships}")
                         self.documents.append(current_chunk.strip())
-                        self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities})
-                    current_chunk = sentence
+                        self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities, "relationships": relationships})
+                    current_chunk = sentence.text
             if current_chunk: # Add the last chunk
                 chunk_doc = self.nlp(current_chunk.strip())
                 entities = [{"text": ent.text, "label": ent.label_} for ent in chunk_doc.ents]
+                relationships = self.extract_relationships(chunk_doc)
                 print(f"[DEBUG] Extracted entities for last chunk (page {doc_page.get('page')}): {entities}")
+                print(f"[DEBUG] Extracted relationships for last chunk (page {doc_page.get('page')}): {relationships}")
                 self.documents.append(current_chunk.strip())
-                self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities})
+                self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities, "relationships": relationships})
 
         if not self.documents:
             return 0, None, []

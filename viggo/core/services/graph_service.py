@@ -78,6 +78,15 @@ class GraphService:
             )
             session.run(query, chunk_id=chunk_id, entity_name=entity_name)
 
+    def create_relationship(self, source_entity: str, target_entity: str, relationship_type: str):
+        with self.driver.session() as session:
+            query = (
+                "MATCH (a), (b) "
+                "WHERE a.name = $source_entity AND b.name = $target_entity "
+                f"MERGE (a)-[:{relationship_type}]->(b)"
+            )
+            session.run(query, source_entity=source_entity, target_entity=target_entity)
+
     def extract_and_load_graph(self, filename: str, processed_chunks_with_metadata: List[Dict]):
         doc_filename = self.create_document_node(filename, filename) # Using filename as path for simplicity
 
@@ -85,6 +94,7 @@ class GraphService:
             page_number = chunk_data.get("page")
             content = chunk_data.get("content")
             entities = chunk_data.get("entities", [])
+            relationships = chunk_data.get("relationships", [])
             chunk_id = f"{doc_filename}_page{page_number}_chunk{i}"
 
             self.create_page_node(doc_filename, page_number)
@@ -95,6 +105,9 @@ class GraphService:
                 entity_label = entity["label"]
                 self.create_entity_node(entity_name, entity_label, "")
                 self.link_chunk_to_entity(chunk_id, entity_name, entity_label)
+
+            for rel in relationships:
+                self.create_relationship(rel["source"], rel["target"], rel["type"])
 
     def get_related_info_for_entity(self, entity_name: str, entity_label: str = "") -> List[Dict[str, Any]]:
         print(f"[DEBUG] get_related_info_for_entity called with entity_name='{entity_name}', entity_label='{entity_label}'")
