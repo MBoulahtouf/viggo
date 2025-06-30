@@ -136,17 +136,35 @@ class RAGService:
 
             # Query for related information based on entity type
             if entity_label == "PERSON":
-                related_info = self.graph_service.get_related_info_for_entity(entity_name, "Character")
-                if related_info:
-                    graph_context_parts.append(f"Knowledge Graph about {entity_name} (Character):\n{related_info}")
+                related_info_list = self.graph_service.get_related_info_for_entity(entity_name, "Character")
+                if related_info_list:
+                    for info in related_info_list:
+                        entity_info = f"{info["entity"]["name"]} ({', '.join(info["entity"]["labels"])})"
+                        if "relationship" in info:
+                            relationship_info = f"{info["relationship"]["type"]} {info["related_node"]["name"]} ({', '.join(info["related_node"]["labels"])})"
+                            graph_context_parts.append(f"Knowledge Graph: {entity_info} {relationship_info}")
+                        else:
+                            graph_context_parts.append(f"Knowledge Graph: {entity_info}")
             elif entity_label == "LOC":
-                related_info = self.graph_service.get_related_info_for_entity(entity_name, "Location")
-                if related_info:
-                    graph_context_parts.append(f"Knowledge Graph about {entity_name} (Location):\n{related_info}")
+                related_info_list = self.graph_service.get_related_info_for_entity(entity_name, "Location")
+                if related_info_list:
+                    for info in related_info_list:
+                        entity_info = f"{info["entity"]["name"]} ({', '.join(info["entity"]["labels"])})"
+                        if "relationship" in info:
+                            relationship_info = f"{info["relationship"]["type"]} {info["related_node"]["name"]} ({', '.join(info["related_node"]["labels"])})"
+                            graph_context_parts.append(f"Knowledge Graph: {entity_info} {relationship_info}")
+                        else:
+                            graph_context_parts.append(f"Knowledge Graph: {entity_info}")
             elif entity_label == "ORG":
-                related_info = self.graph_service.get_related_info_for_entity(entity_name, "Organization")
-                if related_info:
-                    graph_context_parts.append(f"Knowledge Graph about {entity_name} (Organization):\n{related_info}")
+                related_info_list = self.graph_service.get_related_info_for_entity(entity_name, "Organization")
+                if related_info_list:
+                    for info in related_info_list:
+                        entity_info = f"{info["entity"]["name"]} ({', '.join(info["entity"]["labels"])})"
+                        if "relationship" in info:
+                            relationship_info = f"{info["relationship"]["type"]} {info["related_node"]["name"]} ({', '.join(info["related_node"]["labels"])})"
+                            graph_context_parts.append(f"Knowledge Graph: {entity_info} {relationship_info}")
+                        else:
+                            graph_context_parts.append(f"Knowledge Graph: {entity_info}")
             # Add more entity types as needed
 
         if graph_context_parts:

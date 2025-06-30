@@ -49,6 +49,7 @@ class GraphService:
             return chunk_id
 
     def create_entity_node(self, name: str, label: str, description: str = "") -> str:
+        name = name.strip()
         print(f"[DEBUG] Creating entity node: Name='{name}', Label='{label}'")
         with self.driver.session() as session:
             if label == "PERSON":
@@ -95,79 +96,96 @@ class GraphService:
                 self.create_entity_node(entity_name, entity_label, "")
                 self.link_chunk_to_entity(chunk_id, entity_name, entity_label)
 
-    def get_related_info_for_entity(self, entity_name: str, entity_label: str) -> str:
+    def get_related_info_for_entity(self, entity_name: str, entity_label: str = "") -> List[Dict[str, Any]]:
+        print(f"[DEBUG] get_related_info_for_entity called with entity_name='{entity_name}', entity_label='{entity_label}'")
         with self.driver.session() as session:
-            query = (
-                f"MATCH (e:{entity_label} {{name: $entity_name}})-[r]-(n) "
-                "RETURN e.name AS entityName, labels(e) AS entityLabels, type(r) AS relationshipType, n.name AS relatedNodeName, labels(n) AS relatedNodeLabels "
-                "LIMIT 5"
-            )
-            result = session.run(query, entity_name=entity_name)
+            query_parts = [
+                f"MATCH (e) WHERE toLower(e.name) CONTAINS toLower($entity_name)"
+            ]
+            if entity_label:
+                query_parts.append(f"AND '{entity_label}' IN labels(e)")
             
-            info_parts = []
+            query_parts.append(
+                "OPTIONAL MATCH (e)-[r]-(n) "
+                "RETURN e.name AS entityName, labels(e) AS entityLabels, properties(e) AS entityProperties, "
+                "type(r) AS relationshipType, properties(r) AS relationshipProperties, "
+                "n.name AS relatedNodeName, labels(n) AS relatedNodeLabels, properties(n) AS relatedNodeProperties "
+                "LIMIT 10"
+            )
+            cypher_query = " ".join(query_parts)
+            print(f"[DEBUG] get_related_info_for_entity Cypher query: {cypher_query}")
+            result = session.run(cypher_query, entity_name=entity_name)
+            
+            structured_info = []
             for record in result:
-                info_parts.append(
-                    f"  - {record["entityName"]} ({', '.join(record["entityLabels"])}) "
-                    f"{record["relationshipType"]} {record["relatedNodeName"]} ({', '.join(record["relatedNodeLabels"])})"
-                )
-            return "\n".join(info_parts)
+                info = {
+                    "entity": {
+                        "name": record["entityName"],
+                        "labels": record["entityLabels"],
+                        "properties": record["entityProperties"]
+                    }
+                }
+                if record["relationshipType"]:
+                    info["relationship"] = {
+                        "type": record["relationshipType"],
+                        "properties": record["relationshipProperties"]
+                    }
+                    info["related_node"] = {
+                        "name": record["relatedNodeName"],
+                        "labels": record["relatedNodeLabels"],
+                        "properties": record["relatedNodeProperties"]
+                    }
+                structured_info.append(info)
+            print(f"[DEBUG] get_related_info_for_entity result: {structured_info}")
+            return structured_info
 
     def get_entity_graph_data(self, entity_name: str, entity_label: str = "") -> Dict[str, Any]:
         print(f"[DEBUG] get_entity_graph_data called with entity_name='{entity_name}', entity_label='{entity_label}'")
         with self.driver.session() as session:
             entity_result = None
             found_entity_name = None
+            found_entity_labels = []
 
-            # Prioritize Character search if entity_label is Character
+            # Build the initial node lookup query
+            node_lookup_query_parts = [
+                "MATCH (e)"
+            ]
             if entity_label == "Character":
-                character_query = (
-                    "MATCH (e:Character) "
-                    "WHERE toLower(e.name) CONTAINS toLower($entity_name) OR toLower(e.first_name) CONTAINS toLower($entity_name) "
-                    "RETURN properties(e) AS properties, labels(e) AS labels, e.name AS name"
-                )
-                print(f"[DEBUG] Attempting Character-specific query: {character_query}")
-                entity_result = session.run(character_query, entity_name=entity_name).single()
-                if entity_result:
-                    found_entity_name = entity_result["name"]
-                    print(f"[DEBUG] Character-specific query result: {entity_result}")
+                node_lookup_query_parts.append("WHERE (toLower(e.name) CONTAINS toLower($entity_name) OR toLower(e.first_name) CONTAINS toLower($entity_name)) AND 'Character' IN labels(e)")
+            elif entity_label:
+                node_lookup_query_parts.append(f"WHERE toLower(e.name) CONTAINS toLower($entity_name) AND '{entity_label}' IN labels(e)")
+            else:
+                node_lookup_query_parts.append("WHERE toLower(e.name) CONTAINS toLower($entity_name)")
+            node_lookup_query_parts.append("RETURN properties(e) AS properties, labels(e) AS labels, e.name AS name")
+            node_lookup_query = " ".join(node_lookup_query_parts)
 
-            # General search fallback if no Character found or different label
-            if not entity_result and entity_label != "Character":
-                general_query = f"MATCH (e:{entity_label}) WHERE toLower(e.name) CONTAINS toLower($entity_name) RETURN properties(e) AS properties, labels(e) AS labels, e.name AS name"
-                print(f"[DEBUG] Attempting general query with label: {general_query}")
-                entity_result = session.run(general_query, entity_name=entity_name).single()
-                if entity_result:
-                    found_entity_name = entity_result["name"]
-                    print(f"[DEBUG] General query with label result: {entity_result}")
-
-            # Final fallback: search any node with CONTAINS
-            if not entity_result:
-                any_label_query = f"MATCH (e) WHERE toLower(e.name) CONTAINS toLower($entity_name) RETURN properties(e) AS properties, labels(e) AS labels, e.name AS name"
-                print(f"[DEBUG] Attempting any label CONTAINS query: {any_label_query}")
-                entity_result = session.run(any_label_query, entity_name=entity_name).single()
-                if entity_result:
-                    found_entity_name = entity_result["name"]
-                    print(f"[DEBUG] Any label CONTAINS query result: {entity_result}")
+            print(f"[DEBUG] Node lookup query: {node_lookup_query}")
+            entity_result = session.run(node_lookup_query, entity_name=entity_name).single()
+            print(f"[DEBUG] Node lookup result: {entity_result}")
 
             if not entity_result:
                 print(f"[DEBUG] No entity found for '{entity_name}' with label '{entity_label}'.")
                 return {}
 
+            found_entity_name = entity_result["name"]
+            found_entity_labels = entity_result["labels"]
+
             entity_data = {
                 "name": found_entity_name,
-                "labels": entity_result["labels"],
+                "labels": found_entity_labels,
                 "properties": entity_result["properties"],
                 "relationships": []
             }
 
-            # Get direct relationships (using the found entity's name for consistency)
+            # Get direct relationships using the found entity's exact name and labels
             relationships_query_str = (
-                f"MATCH (e:{entity_label}) WHERE toLower(e.name) = toLower($found_entity_name) MATCH (e)-[r]-(n) "
+                "MATCH (e) WHERE e.name = $found_entity_name AND any(label IN labels(e) WHERE label IN $found_entity_labels) "
+                "MATCH (e)-[r]-(n) "
                 "RETURN type(r) AS relationshipType, properties(r) AS relationshipProperties, "
                 "labels(n) AS targetNodeLabels, properties(n) AS targetNodeProperties, n.name AS targetNodeName"
             )
             print(f"[DEBUG] Relationships query: {relationships_query_str}")
-            relationships_result = session.run(relationships_query_str, found_entity_name=found_entity_name)
+            relationships_result = session.run(relationships_query_str, found_entity_name=found_entity_name, found_entity_labels=found_entity_labels)
 
             for record in relationships_result:
                 entity_data["relationships"].append({
