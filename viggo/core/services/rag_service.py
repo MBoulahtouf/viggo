@@ -36,14 +36,33 @@ class RAGService:
     def extract_relationships(self, doc: spacy.tokens.doc.Doc) -> List[Dict]:
         relationships = []
         for sent in doc.sents:
-            entities = sent.ents
-            for i in range(len(entities)):
-                for j in range(i + 1, len(entities)):
-                    relationships.append({
-                        "source": entities[i].text,
-                        "target": entities[j].text,
-                        "type": "RELATED_TO"
-                    })
+            ents = sent.ents
+            if len(ents) > 1: # We need at least two entities
+                # Find the main verb (root of the dependency tree)
+                root = sent.root
+                if root.pos_ == 'VERB':
+                    # Simple assumption: the verb connects the first two entities found
+                    relationship_type = root.lemma_.upper()
+                    if any(child.dep_ == "neg" for child in root.children):
+                        relationship_type = "NOT_" + relationship_type
+                    
+                    # Create relationships between all pairs of entities in the sentence
+                    for i in range(len(ents)):
+                        for j in range(i + 1, len(ents)):
+                            relationships.append({
+                                "source": ents[i].text,
+                                "target": ents[j].text,
+                                "type": relationship_type
+                            })
+                else:
+                    # Fallback for sentences without a clear verb root
+                    for i in range(len(ents)):
+                        for j in range(i + 1, len(ents)):
+                            relationships.append({
+                                "source": ents[i].text,
+                                "target": ents[j].text,
+                                "type": "RELATED_TO"
+                            })
         return relationships
 
     def build_rag_index(self, document_store: List[Dict]) -> Tuple[int, IndexFlatL2, List[Dict]]:
