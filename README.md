@@ -1,12 +1,12 @@
-# Strider: The Spoiler-Free Lore Companion
+# Viggo: The Spoiler-Free Lore Companion
 
-Strider is an intelligent, context-aware Q&A tool designed to help you explore the lore of books, games, and other documents without spoiling the plot. Ask a question, tell Strider where you are in the story, and get safe, spoiler-free answers.
+Viggo is an intelligent, context-aware Q&A tool designed to help you explore the lore of books, games, and other documents without spoiling the plot. Ask a question, tell Viggo where you are in the story, and get safe, spoiler-free answers.
 
 ## About The Project
 
 This project was built to solve a common problem for fans of epic stories: you want to understand a specific detail or character, but searching online almost always leads to spoilers.
 
-Strider uses a Retrieval-Augmented Generation (RAG) architecture to ensure its answers are based *only* on the content you have already read.
+Viggo uses a Retrieval-Augmented Generation (RAG) architecture to ensure its answers are based *only* on the content you have already read.
 
 **Core Features:**
 * Upload a document (PDF) to serve as the knowledge base.
@@ -37,8 +37,8 @@ Follow these instructions to get a local copy up and running for development and
 
 1.  **Clone the repository:**
     ```sh
-    git clone MBoulahtouf/strider
-    cd strider
+    git clone MBoulahtouf/viggo
+    cd viggo
     ```
 2.  **Install dependencies:**
     Poetry will create a virtual environment and install all necessary packages from the `pyproject.toml` file.
@@ -50,4 +50,4 @@ Follow these instructions to get a local copy up and running for development and
 
 To run the FastAPI server, use the `poetry run` command:
 ```sh
-poetry run uvicorn strider.main:app --reload
+poetry run uvicorn viggo.main:app --reload

@@ -17,3 +17,8 @@ The_Name_of_the_Rose_Umberto_Eco.pdf
 
 # Tests
 test_graph.py
+
+# Generated files
+faiss_index.bin
+document_data.pkl
+uvicorn_output.txt

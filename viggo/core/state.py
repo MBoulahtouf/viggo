@@ -1,4 +1,4 @@
-# strider/core/state.py
+# viggo/core/state.py
 
 # This module holds the in-memory state of the application,
 # replacing the need for global variables in the main file.

@@ -1,4 +1,4 @@
-# strider/models/schemas.py
+# viggo/models/schemas.py
 from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
@@ -6,6 +6,7 @@ class QueryRequest(BaseModel):
     page_number: int
 
 class QueryResponse(BaseModel):
+    question: str
     answer: str
     source_pages: list[int]
 

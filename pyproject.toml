@@ -1,12 +1,12 @@
 [project]
-name = "strider"
+name = "viggo"
 version = "0.1.0"
 description = "A spoiler-free lore companion using RAG."
 authors = [
     {name = "Marouan"}
 ]
 readme = "README.md"
-requires-python = ">=3.12, <3.14"
+requires-python = "~3.12"
 dependencies = [
     "fastapi (>=0.115.12,<0.116.0)",
     "uvicorn[standard] (>=0.34.3,<0.35.0)",
@@ -19,8 +19,15 @@ dependencies = [
     "neo4j (>=5.28.1,<6.0.0)",
     "spacy (>=3.8.7,<4.0.0)",
     "pydantic-settings (>=2.9.1,<3.0.0)",
+    "mlflow",
+    "wandb",
+    
+    
+    
 ]
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
