@@ -1,6 +1,7 @@
 # viggo/core/services/graph_service.py
 from neo4j import GraphDatabase
 from typing import List, Dict, Any
+from collections import defaultdict
 
 class GraphService:
     def __init__(self, uri, user, password, clear_on_startup: bool = False):
@@ -78,11 +79,11 @@ class GraphService:
             )
             session.run(query, chunk_id=chunk_id, entity_name=entity_name)
 
-    def create_relationship(self, source_entity: str, target_entity: str, relationship_type: str):
+    def create_relationship(self, source_entity: str, source_label: str, target_entity: str, target_label: str, relationship_type: str):
         with self.driver.session() as session:
             query = (
-                "MATCH (a), (b) "
-                "WHERE a.name = $source_entity AND b.name = $target_entity "
+                f"MATCH (a:{source_label} {{name: $source_entity}}) "
+                f"MATCH (b:{target_label} {{name: $target_entity}}) "
                 f"MERGE (a)-[:{relationship_type}]->(b)"
             )
             session.run(query, source_entity=source_entity, target_entity=target_entity)
@@ -107,9 +108,22 @@ class GraphService:
                 self.link_chunk_to_entity(chunk_id, entity_name, entity_label)
 
             for rel in relationships:
-                self.create_relationship(rel["source"], rel["target"], rel["type"])
+                source_entity = rel["source"]
+                target_entity = rel["target"]
+                # Find the labels for the source and target entities from the entities list
+                source_label = next((e["label"] for e in entities if e["text"] == source_entity), None)
+                target_label = next((e["label"] for e in entities if e["text"] == target_entity), None)
 
-    def get_related_info_for_entity(self, entity_name: str, entity_label: str = "") -> List[Dict[str, Any]]:
+                if source_label and target_label:
+                    self.create_relationship(
+                        source_entity, 
+                        source_label, 
+                        target_entity, 
+                        target_label, 
+                        rel["type"]
+                    )
+
+    def get_related_info_for_entity(self, entity_name: str, entity_label: str = "", excluded_rel_types: List[str] = None, excluded_node_labels: List[str] = None) -> List[Dict[str, Any]]:
         print(f"[DEBUG] get_related_info_for_entity called with entity_name='{entity_name}', entity_label='{entity_label}'")
         with self.driver.session() as session:
             query_parts = [
@@ -120,6 +134,18 @@ class GraphService:
             
             query_parts.append(
                 "OPTIONAL MATCH (e)-[r]-(n) "
+            )
+
+            where_clauses = []
+            if excluded_rel_types:
+                where_clauses.append("type(r) NOT IN $excluded_rel_types")
+            if excluded_node_labels:
+                where_clauses.append("all(label IN labels(n) WHERE label NOT IN $excluded_node_labels)")
+            
+            if where_clauses:
+                query_parts.append("WHERE " + " AND ".join(where_clauses))
+
+            query_parts.append(
                 "RETURN e.name AS entityName, labels(e) AS entityLabels, properties(e) AS entityProperties, "
                 "type(r) AS relationshipType, properties(r) AS relationshipProperties, "
                 "n.name AS relatedNodeName, labels(n) AS relatedNodeLabels, properties(n) AS relatedNodeProperties "
@@ -127,7 +153,14 @@ class GraphService:
             )
             cypher_query = " ".join(query_parts)
             print(f"[DEBUG] get_related_info_for_entity Cypher query: {cypher_query}")
-            result = session.run(cypher_query, entity_name=entity_name)
+            
+            params = {
+                "entity_name": entity_name,
+                "excluded_rel_types": excluded_rel_types,
+                "excluded_node_labels": excluded_node_labels
+            }
+            
+            result = session.run(cypher_query, params)
             
             structured_info = []
             for record in result:
@@ -212,3 +245,33 @@ class GraphService:
                 })
             print(f"[DEBUG] Entity data returned: {entity_data}")
             return entity_data
+
+    def list_all_nodes(self, label: str = None) -> list:
+        allowed_labels = {"Character", "Location", "Organization"}
+        with self.driver.session() as session:
+            if label and label in allowed_labels:
+                result = session.run("MATCH (n) WHERE n.name IS NOT NULL AND $label IN labels(n) RETURN n.name AS name, labels(n) AS labels", label=label)
+            else:
+                result = session.run("MATCH (n) WHERE n.name IS NOT NULL AND any(l IN labels(n) WHERE l IN $allowed_labels) RETURN n.name AS name, labels(n) AS labels", allowed_labels=list(allowed_labels))
+            return [{"name": record["name"], "labels": record["labels"]} for record in result]
+
+    def grouped_nodes(self, label: str = None) -> list:
+        nodes = self.list_all_nodes(label=label)
+        grouped = defaultdict(lambda: {"canonical": None, "aliases": set(), "labels": set()})
+        for node in nodes:
+            if not node["name"]:
+                continue
+            canonical = node["name"].strip().lower()
+            grouped[canonical]["canonical"] = canonical
+            grouped[canonical]["aliases"].add(node["name"])
+            grouped[canonical]["labels"].update(node["labels"])
+        # Convert sets to lists for JSON serialization
+        result = [
+            {
+                "canonical": group["canonical"],
+                "aliases": sorted(list(group["aliases"])),
+                "labels": sorted(list(group["labels"]))
+            }
+            for group in grouped.values()
+        ]
+        return result

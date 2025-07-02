@@ -33,68 +33,103 @@ class RAGService:
         # For now, it returns all pages as content pages
         return all_pages_data
 
-    def extract_relationships(self, doc: spacy.tokens.doc.Doc) -> List[Dict]:
+    def extract_relationships(self, doc: spacy.tokens.doc.Doc, filtered_entities=None) -> List[Dict]:
         relationships = []
+        # Build a set of allowed entity texts for quick lookup
+        allowed_entity_texts = set()
+        allowed_entity_labels = dict()
+        if filtered_entities is not None:
+            for ent in filtered_entities:
+                allowed_entity_texts.add(ent["text"])
+                allowed_entity_labels[ent["text"]] = ent["label"]
         for sent in doc.sents:
-            ents = sent.ents
-            if len(ents) > 1: # We need at least two entities
-                # Find the main verb (root of the dependency tree)
+            ents = [ent for ent in sent.ents if filtered_entities is None or (" ".join(ent.text.split()) in allowed_entity_texts)]
+            if len(ents) > 1:
                 root = sent.root
                 if root.pos_ == 'VERB':
-                    # Simple assumption: the verb connects the first two entities found
                     relationship_type = root.lemma_.upper()
                     if any(child.dep_ == "neg" for child in root.children):
                         relationship_type = "NOT_" + relationship_type
-                    
-                    # Create relationships between all pairs of entities in the sentence
+                    # Only create relationships between allowed types
                     for i in range(len(ents)):
                         for j in range(i + 1, len(ents)):
-                            relationships.append({
-                                "source": ents[i].text,
-                                "target": ents[j].text,
-                                "type": relationship_type
-                            })
+                            ent1 = " ".join(ents[i].text.split())
+                            ent2 = " ".join(ents[j].text.split())
+                            label1 = allowed_entity_labels.get(ent1)
+                            label2 = allowed_entity_labels.get(ent2)
+                            if label1 and label2 and label1 != "CARDINAL" and label2 != "CARDINAL":
+                                relationships.append({
+                                    "source": ent1,
+                                    "target": ent2,
+                                    "type": relationship_type
+                                })
                 else:
-                    # Fallback for sentences without a clear verb root
                     for i in range(len(ents)):
                         for j in range(i + 1, len(ents)):
-                            relationships.append({
-                                "source": ents[i].text,
-                                "target": ents[j].text,
-                                "type": "RELATED_TO"
-                            })
+                            ent1 = " ".join(ents[i].text.split())
+                            ent2 = " ".join(ents[j].text.split())
+                            label1 = allowed_entity_labels.get(ent1)
+                            label2 = allowed_entity_labels.get(ent2)
+                            if label1 and label2 and label1 != "CARDINAL" and label2 != "CARDINAL":
+                                relationships.append({
+                                    "source": ent1,
+                                    "target": ent2,
+                                    "type": "RELATED_TO"
+                                })
         return relationships
 
     def build_rag_index(self, document_store: List[Dict]) -> Tuple[int, IndexFlatL2, List[Dict]]:
         self.documents = []
         self.all_chunks_with_metadata = []
         
+        # Only keep these entity types and map to domain
+        ENTITY_LABEL_MAP = {
+            "PERSON": "Character",
+            "ORG": "Organization",
+            "GPE": "Location",
+            "LOC": "Location"
+        }
+        ALLOWED_LABELS = set(ENTITY_LABEL_MAP.keys())
+
         for doc_page in document_store:
             text = doc_page['content']
             doc = self.nlp(text)
             sentences = [sent for sent in doc.sents]
-            
             current_chunk = ""
             for sentence in sentences:
-                if len(current_chunk) + len(sentence.text) < 500: # Keep chunks under 500 characters
+                if len(current_chunk) + len(sentence.text) < 500:
                     current_chunk += " " + sentence.text
                 else:
                     if current_chunk:
-                        # Extract entities and relationships for the current chunk
                         chunk_doc = self.nlp(current_chunk.strip())
-                        entities = [{"text": ent.text, "label": ent.label_} for ent in chunk_doc.ents]
-                        relationships = self.extract_relationships(chunk_doc)
-                        print(f"[DEBUG] Extracted entities for chunk (page {doc_page.get('page')}): {entities}")
-                        print(f"[DEBUG] Extracted relationships for chunk (page {doc_page.get('page')}): {relationships}")
+                        # Filter and normalize entities
+                        entities = []
+                        for ent in chunk_doc.ents:
+                            if ent.label_ in ALLOWED_LABELS:
+                                ent_text = " ".join(ent.text.split()) # Normalize whitespace
+                                entities.append({
+                                    "text": ent_text,
+                                    "label": ENTITY_LABEL_MAP[ent.label_]
+                                })
+                        relationships = self.extract_relationships(chunk_doc, entities)
+                        print(f"[DEBUG] Filtered entities for chunk (page {doc_page.get('page')}): {entities}")
+                        print(f"[DEBUG] Filtered relationships for chunk (page {doc_page.get('page')}): {relationships}")
                         self.documents.append(current_chunk.strip())
                         self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities, "relationships": relationships})
                     current_chunk = sentence.text
-            if current_chunk: # Add the last chunk
+            if current_chunk:
                 chunk_doc = self.nlp(current_chunk.strip())
-                entities = [{"text": ent.text, "label": ent.label_} for ent in chunk_doc.ents]
-                relationships = self.extract_relationships(chunk_doc)
-                print(f"[DEBUG] Extracted entities for last chunk (page {doc_page.get('page')}): {entities}")
-                print(f"[DEBUG] Extracted relationships for last chunk (page {doc_page.get('page')}): {relationships}")
+                entities = []
+                for ent in chunk_doc.ents:
+                    if ent.label_ in ALLOWED_LABELS:
+                        ent_text = " ".join(ent.text.split())
+                        entities.append({
+                            "text": ent_text,
+                            "label": ENTITY_LABEL_MAP[ent.label_]
+                        })
+                relationships = self.extract_relationships(chunk_doc, entities)
+                print(f"[DEBUG] Filtered entities for last chunk (page {doc_page.get('page')}): {entities}")
+                print(f"[DEBUG] Filtered relationships for last chunk (page {doc_page.get('page')}): {relationships}")
                 self.documents.append(current_chunk.strip())
                 self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities, "relationships": relationships})
 
