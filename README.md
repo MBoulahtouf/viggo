@@ -51,3 +51,48 @@ Follow these instructions to get a local copy up and running for development and
 To run the FastAPI server, use the `poetry run` command:
 ```sh
 poetry run uvicorn viggo.main:app --reload
+```
+
+## Quick Start
+
+For a quick setup, see our [Quick Start Guide](docs/QUICKSTART.md).
+
+## Documentation
+
+- [Development Guide](docs/DEVELOPMENT.md) - Comprehensive development setup and guidelines
+- [API Documentation](http://127.0.0.1:8000/docs) - Interactive API docs (when server is running)
+
+## Environment Setup
+
+1. Copy the environment template:
+   ```bash
+   cp .env.sample .env
+   ```
+
+2. Edit `.env` with your configuration:
+   ```bash
+   # Required
+   GROQ_API_KEY=your_groq_api_key_here
+   NEO4J_URI=bolt://localhost:7687
+   NEO4J_USER=neo4j
+   NEO4J_PASSWORD=your_neo4j_password_here
+   
+   # Optional
+   MLFLOW_TRACKING_URI=http://localhost:5000
+   WANDB_PROJECT=viggo-lore-companion
+   DATA_DIR=/absolute/path/to/data
+   ```
+
+3. Download the spaCy model:
+   ```bash
+   poetry run python -m spacy download en_core_web_sm
+   ```
+
+## Testing
+
+Run the test suite:
+```bash
+poetry run pytest
+```
+
+For more testing information, see the [Development Guide](docs/DEVELOPMENT.md#testing).
