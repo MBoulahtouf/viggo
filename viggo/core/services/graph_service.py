@@ -1,20 +1,105 @@
 # viggo/core/services/graph_service.py
 from neo4j import GraphDatabase
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
+import logging
+from dataclasses import dataclass
+from .aliasing_service import AliasingService
+
+
+@dataclass
+class PaginationParams:
+    """Parameters for pagination."""
+    limit: int = 100
+    offset: int = 0
+    
+    def __post_init__(self):
+        if self.limit <= 0:
+            raise ValueError("Limit must be positive")
+        if self.offset < 0:
+            raise ValueError("Offset must be non-negative")
+
+
+@dataclass
+class NodeResult:
+    """Result for a single node."""
+    name: str
+    labels: List[str]
+    properties: Dict[str, Any]
+
+
+@dataclass
+class RelationshipResult:
+    """Result for a relationship."""
+    type: str
+    properties: Dict[str, Any]
+    target_node: NodeResult
+
+
+@dataclass
+class EntityGraphResult:
+    """Complete entity graph data."""
+    name: str
+    labels: List[str]
+    properties: Dict[str, Any]
+    relationships: List[RelationshipResult]
+
+
+class GraphServiceError(Exception):
+    """Base exception for GraphService errors."""
+    pass
+
 
 class GraphService:
-    def __init__(self, uri, user, password, clear_on_startup: bool = False):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+    def __init__(self, uri: str, user: str, password: str, clear_on_startup: bool = False, custom_aliases: Optional[Dict[str, str]] = None):
+        """
+        Initialize GraphService with Neo4j connection.
+        
+        Args:
+            uri: Neo4j connection URI
+            user: Neo4j username
+            password: Neo4j password
+            clear_on_startup: Whether to clear database on startup
+            custom_aliases: Optional dictionary of alias -> canonical mappings
+            
+        Raises:
+            GraphServiceError: If connection fails
+        """
+        try:
+            self.driver = GraphDatabase.driver(uri, auth=(user, password))
+            # Test connection
+            with self.driver.session() as session:
+                session.run("RETURN 1")
+            logging.info("Successfully connected to Neo4j")
+        except Exception as e:
+            raise GraphServiceError(f"Failed to connect to Neo4j: {e}")
+        
+        # Initialize aliasing service
+        self.aliasing_service = AliasingService(custom_aliases)
+            
         if clear_on_startup:
             self.clear_database()
 
-    def close(self):
-        self.driver.close()
+    def close(self) -> None:
+        """Close the Neo4j driver connection."""
+        if self.driver:
+            self.driver.close()
+            logging.info("Neo4j connection closed")
 
-    def clear_database(self):
-        with self.driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
+    def clear_database(self) -> None:
+        """
+        Clear all nodes and relationships from the database.
+        
+        Raises:
+            GraphServiceError: If operation fails
+        """
+        try:
+            with self.driver.session() as session:
+                result = session.run("MATCH (n) DETACH DELETE n RETURN count(n) as deleted_count")
+                deleted_count = result.single()["deleted_count"]
+                logging.info(f"Cleared {deleted_count} nodes from database")
+        except Exception as e:
+            raise GraphServiceError(f"Failed to clear database: {e}")
 
     def create_document_node(self, filename: str, path: str) -> str:
         with self.driver.session() as session:
@@ -246,25 +331,74 @@ class GraphService:
             print(f"[DEBUG] Entity data returned: {entity_data}")
             return entity_data
 
-    def list_all_nodes(self, label: str = None) -> list:
+    def list_all_nodes(self, label: Optional[str] = None, pagination: Optional[PaginationParams] = None) -> List[NodeResult]:
+        """
+        List all nodes with optional filtering and pagination.
+        
+        Args:
+            label: Optional label to filter by (Character, Location, Organization)
+            pagination: Optional pagination parameters
+            
+        Returns:
+            List of NodeResult objects
+            
+        Raises:
+            GraphServiceError: If query fails
+        """
+        if pagination is None:
+            pagination = PaginationParams()
+            
         allowed_labels = {"Character", "Location", "Organization"}
-        with self.driver.session() as session:
-            if label and label in allowed_labels:
-                result = session.run("MATCH (n) WHERE n.name IS NOT NULL AND $label IN labels(n) RETURN n.name AS name, labels(n) AS labels", label=label)
-            else:
-                result = session.run("MATCH (n) WHERE n.name IS NOT NULL AND any(l IN labels(n) WHERE l IN $allowed_labels) RETURN n.name AS name, labels(n) AS labels", allowed_labels=list(allowed_labels))
-            return [{"name": record["name"], "labels": record["labels"]} for record in result]
+        
+        try:
+            with self.driver.session() as session:
+                if label and label in allowed_labels:
+                    query = (
+                        "MATCH (n) WHERE n.name IS NOT NULL AND $label IN labels(n) "
+                        "RETURN n.name AS name, labels(n) AS labels, properties(n) AS properties "
+                        "SKIP $offset LIMIT $limit"
+                    )
+                    result = session.run(query, label=label, offset=pagination.offset, limit=pagination.limit)
+                else:
+                    query = (
+                        "MATCH (n) WHERE n.name IS NOT NULL AND any(l IN labels(n) WHERE l IN $allowed_labels) "
+                        "RETURN n.name AS name, labels(n) AS labels, properties(n) AS properties "
+                        "SKIP $offset LIMIT $limit"
+                    )
+                    result = session.run(query, allowed_labels=list(allowed_labels), offset=pagination.offset, limit=pagination.limit)
+                
+                return [
+                    NodeResult(
+                        name=record["name"],
+                        labels=record["labels"],
+                        properties=record["properties"]
+                    )
+                    for record in result
+                ]
+        except Exception as e:
+            raise GraphServiceError(f"Failed to list nodes: {e}")
 
-    def grouped_nodes(self, label: str = None) -> list:
+    def grouped_nodes(self, label: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Group nodes by canonical name (case-insensitive) showing all aliases and labels.
+        
+        Args:
+            label: Optional label to filter by
+            
+        Returns:
+            List of grouped node dictionaries
+        """
         nodes = self.list_all_nodes(label=label)
         grouped = defaultdict(lambda: {"canonical": None, "aliases": set(), "labels": set()})
+        
         for node in nodes:
-            if not node["name"]:
+            if not node.name:
                 continue
-            canonical = node["name"].strip().lower()
+            canonical = node.name.strip().lower()
             grouped[canonical]["canonical"] = canonical
-            grouped[canonical]["aliases"].add(node["name"])
-            grouped[canonical]["labels"].update(node["labels"])
+            grouped[canonical]["aliases"].add(node.name)
+            grouped[canonical]["labels"].update(node.labels)
+            
         # Convert sets to lists for JSON serialization
         result = [
             {
@@ -275,3 +409,72 @@ class GraphService:
             for group in grouped.values()
         ]
         return result
+    
+    def add_alias_mapping(self, alias: str, canonical: str, confidence: float = 1.0, source: str = "manual") -> None:
+        """
+        Add an alias mapping to the aliasing service.
+        
+        Args:
+            alias: The alias/nickname
+            canonical: The canonical name
+            confidence: Confidence score (0.0 to 1.0)
+            source: Source of the mapping
+        """
+        self.aliasing_service.add_alias_mapping(alias, canonical, confidence, source)
+    
+    def resolve_entity_name(self, entity_name: str) -> str:
+        """
+        Resolve an entity name to its canonical form.
+        
+        Args:
+            entity_name: The entity name to resolve
+            
+        Returns:
+            The canonical name
+        """
+        return self.aliasing_service.resolve_to_canonical(entity_name)
+    
+    def get_entity_with_aliases(self, entity_name: str, entity_label: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get entity data including all its aliases.
+        
+        Args:
+            entity_name: The entity name to look up
+            entity_label: Optional label filter
+            
+        Returns:
+            Dictionary containing entity data and aliases
+        """
+        canonical_name = self.resolve_entity_name(entity_name)
+        
+        # Get the main entity data
+        entity_data = self.get_related_info_for_entity(canonical_name, entity_label)
+        
+        if not entity_data:
+            return {}
+        
+        # Get all aliases for this canonical name
+        all_aliases = self.aliasing_service.get_all_aliases(canonical_name)
+        
+        return {
+            "canonical_name": canonical_name,
+            "entity_data": entity_data,
+            "aliases": list(all_aliases),
+            "alias_count": len(all_aliases)
+        }
+    
+    def suggest_aliases_for_entity(self, entity_name: str) -> List[str]:
+        """
+        Suggest potential aliases for an entity.
+        
+        Args:
+            entity_name: The entity to find aliases for
+            
+        Returns:
+            List of potential aliases
+        """
+        # Get all entities for suggestion
+        all_entities = self.list_all_nodes()
+        entity_dicts = [{"name": node.name, "labels": node.labels} for node in all_entities]
+        
+        return self.aliasing_service.suggest_aliases(entity_name, entity_dicts)

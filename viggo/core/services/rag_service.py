@@ -10,6 +10,7 @@ from groq import Groq
 from viggo.core.config import settings
 
 from viggo.core.services.graph_service import GraphService
+from viggo.core.utils.entity_utils import filter_and_map_entities, get_entity_label_map, get_allowed_labels
 
 class RAGService:
     def __init__(self, graph_service: GraphService, model_name: str = "all-MiniLM-L6-v2", index_path: str = "faiss_index.bin", doc_data_path: str = "document_data.pkl"):
@@ -58,11 +59,11 @@ class RAGService:
                             label1 = allowed_entity_labels.get(ent1)
                             label2 = allowed_entity_labels.get(ent2)
                             if label1 and label2 and label1 != "CARDINAL" and label2 != "CARDINAL":
-                                relationships.append({
+                            relationships.append({
                                     "source": ent1,
                                     "target": ent2,
-                                    "type": relationship_type
-                                })
+                                "type": relationship_type
+                            })
                 else:
                     for i in range(len(ents)):
                         for j in range(i + 1, len(ents)):
@@ -71,79 +72,133 @@ class RAGService:
                             label1 = allowed_entity_labels.get(ent1)
                             label2 = allowed_entity_labels.get(ent2)
                             if label1 and label2 and label1 != "CARDINAL" and label2 != "CARDINAL":
-                                relationships.append({
+                            relationships.append({
                                     "source": ent1,
                                     "target": ent2,
-                                    "type": "RELATED_TO"
-                                })
+                                "type": "RELATED_TO"
+                            })
         return relationships
 
-    def build_rag_index(self, document_store: List[Dict]) -> Tuple[int, IndexFlatL2, List[Dict]]:
-        self.documents = []
-        self.all_chunks_with_metadata = []
+    def _chunk_document(self, document_store: List[Dict]) -> List[Dict]:
+        """
+        Chunk documents into smaller pieces for processing.
         
-        # Only keep these entity types and map to domain
-        ENTITY_LABEL_MAP = {
-            "PERSON": "Character",
-            "ORG": "Organization",
-            "GPE": "Location",
-            "LOC": "Location"
-        }
-        ALLOWED_LABELS = set(ENTITY_LABEL_MAP.keys())
-
+        Args:
+            document_store: List of document pages with content
+            
+        Returns:
+            List of chunks with metadata
+        """
+        chunks_with_metadata = []
+        
         for doc_page in document_store:
             text = doc_page['content']
             doc = self.nlp(text)
             sentences = [sent for sent in doc.sents]
             current_chunk = ""
+            
             for sentence in sentences:
                 if len(current_chunk) + len(sentence.text) < 500:
                     current_chunk += " " + sentence.text
                 else:
                     if current_chunk:
-                        chunk_doc = self.nlp(current_chunk.strip())
-                        # Filter and normalize entities
-                        entities = []
-                        for ent in chunk_doc.ents:
-                            if ent.label_ in ALLOWED_LABELS:
-                                ent_text = " ".join(ent.text.split()) # Normalize whitespace
-                                entities.append({
-                                    "text": ent_text,
-                                    "label": ENTITY_LABEL_MAP[ent.label_]
-                                })
-                        relationships = self.extract_relationships(chunk_doc, entities)
-                        print(f"[DEBUG] Filtered entities for chunk (page {doc_page.get('page')}): {entities}")
-                        print(f"[DEBUG] Filtered relationships for chunk (page {doc_page.get('page')}): {relationships}")
-                        self.documents.append(current_chunk.strip())
-                        self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities, "relationships": relationships})
+                        chunk_metadata = self._process_chunk(current_chunk.strip(), doc_page.get("page"))
+                        chunks_with_metadata.append(chunk_metadata)
                     current_chunk = sentence.text
+                    
             if current_chunk:
-                chunk_doc = self.nlp(current_chunk.strip())
-                entities = []
-                for ent in chunk_doc.ents:
-                    if ent.label_ in ALLOWED_LABELS:
-                        ent_text = " ".join(ent.text.split())
-                        entities.append({
-                            "text": ent_text,
-                            "label": ENTITY_LABEL_MAP[ent.label_]
-                        })
-                relationships = self.extract_relationships(chunk_doc, entities)
-                print(f"[DEBUG] Filtered entities for last chunk (page {doc_page.get('page')}): {entities}")
-                print(f"[DEBUG] Filtered relationships for last chunk (page {doc_page.get('page')}): {relationships}")
-                self.documents.append(current_chunk.strip())
-                self.all_chunks_with_metadata.append({"content": current_chunk.strip(), "page": doc_page.get("page"), "entities": entities, "relationships": relationships})
-
-        if not self.documents:
-            return 0, None, []
-
-        embeddings = self.model.encode(self.documents)
-        self.index = IndexFlatL2(embeddings.shape[1])
-        self.index.add(embeddings)
-        write_index(self.index, self.index_path)
+                chunk_metadata = self._process_chunk(current_chunk.strip(), doc_page.get("page"))
+                chunks_with_metadata.append(chunk_metadata)
+        
+        return chunks_with_metadata
+    
+    def _process_chunk(self, chunk_text: str, page_number: int) -> Dict:
+        """
+        Process a single chunk to extract entities and relationships.
+        
+        Args:
+            chunk_text: The text content of the chunk
+            page_number: The page number this chunk came from
+            
+        Returns:
+            Dictionary with chunk metadata including entities and relationships
+        """
+        chunk_doc = self.nlp(chunk_text)
+        # Filter and normalize entities using utility function
+        entities = filter_and_map_entities(chunk_doc, get_allowed_labels())
+        relationships = self.extract_relationships(chunk_doc, entities)
+        
+        print(f"[DEBUG] Filtered entities for chunk (page {page_number}): {entities}")
+        print(f"[DEBUG] Filtered relationships for chunk (page {page_number}): {relationships}")
+        
+        return {
+            "content": chunk_text,
+            "page": page_number,
+            "entities": entities,
+            "relationships": relationships
+        }
+    
+    def _build_vector_index(self, chunks_with_metadata: List[Dict]) -> Tuple[IndexFlatL2, List[str]]:
+        """
+        Build FAISS vector index from chunks.
+        
+        Args:
+            chunks_with_metadata: List of chunks with metadata
+            
+        Returns:
+            Tuple of (FAISS index, list of document texts)
+        """
+        documents = [chunk["content"] for chunk in chunks_with_metadata]
+        
+        if not documents:
+            raise ValueError("No documents to index")
+        
+        embeddings = self.model.encode(documents)
+        index = IndexFlatL2(embeddings.shape[1])
+        index.add(embeddings)
+        
+        return index, documents
+    
+    def _save_index(self, index: IndexFlatL2, chunks_with_metadata: List[Dict]) -> None:
+        """
+        Save the FAISS index and document data to disk.
+        
+        Args:
+            index: The FAISS index to save
+            chunks_with_metadata: The chunks metadata to save
+        """
+        write_index(index, self.index_path)
         with open(self.doc_data_path, 'wb') as f:
-            pickle.dump((self.documents, self.all_chunks_with_metadata), f)
-
-        return len(self.documents), self.index, self.all_chunks_with_metadata
+            pickle.dump((self.documents, chunks_with_metadata), f)
+    
+    def build_rag_index(self, document_store: List[Dict]) -> Tuple[int, IndexFlatL2, List[Dict]]:
+        """
+        Build RAG index from document store using modular approach.
+        
+        Args:
+            document_store: List of document pages with content
+            
+        Returns:
+            Tuple of (number of chunks, FAISS index, chunks with metadata)
+        """
+        # Step 1: Chunk the documents
+        chunks_with_metadata = self._chunk_document(document_store)
+        
+        if not chunks_with_metadata:
+            return 0, None, []
+        
+        # Step 2: Build vector index
+        index, documents = self._build_vector_index(chunks_with_metadata)
+        
+        # Step 3: Update instance variables
+        self.documents = documents
+        self.all_chunks_with_metadata = chunks_with_metadata
+        self.index = index
+        
+        # Step 4: Save to disk
+        self._save_index(index, chunks_with_metadata)
+        
+        return len(documents), index, chunks_with_metadata
 
     def process_pdf(self, file_path: str) -> Tuple[int, IndexFlatL2, List[Dict]]:
         reader = PdfReader(file_path)
@@ -242,19 +297,30 @@ class RAGService:
             return "\n\n".join(graph_context_parts)
         return ""
 
-    def perform_rag_query(self, question: str, page_number: int = None, vector_index=None, all_chunks_with_metadata: List[Dict] = None) -> Dict:
-        print(f"[DEBUG] Query received: question='{question}', page_number={page_number}")
+    def _search_relevant_chunks(self, question: str, page_number: Optional[int] = None, vector_index=None, all_chunks_with_metadata: List[Dict] = None) -> Tuple[List[str], Set[int]]:
+        """
+        Search for relevant chunks using vector similarity.
+        
+        Args:
+            question: The query question
+            page_number: Optional page number filter
+            vector_index: Optional custom vector index
+            all_chunks_with_metadata: Optional custom chunks metadata
+            
+        Returns:
+            Tuple of (relevant_chunks_content, source_pages)
+        """
         current_index = vector_index if vector_index is not None else self.index
         current_chunks_with_metadata = all_chunks_with_metadata if all_chunks_with_metadata is not None else self.all_chunks_with_metadata
 
         if current_index is None:
-            print("[DEBUG] current_index is None. Returning None.")
-            return None
+            print("[DEBUG] current_index is None. Returning empty results.")
+            return [], set()
 
         print(f"[DEBUG] Number of chunks in metadata: {len(current_chunks_with_metadata)}")
         query_embedding = self.model.encode([question])
         print(f"[DEBUG] Query embedding shape: {query_embedding.shape}")
-        distances, indices = current_index.search(query_embedding, 5) # Get top 5 relevant chunks
+        distances, indices = current_index.search(query_embedding, 5)  # Get top 5 relevant chunks
         print(f"[DEBUG] FAISS search results - distances: {distances}, indices: {indices}")
 
         relevant_chunks_content = []
@@ -268,17 +334,80 @@ class RAGService:
                     if chunk_info.get("page"):
                         source_pages.add(chunk_info["page"])
         
+        return relevant_chunks_content, source_pages
+
+    def _generate_answer_with_llm(self, question: str, context: str) -> str:
+        """
+        Generate answer using LLM with the provided context.
+        
+        Args:
+            question: The question to answer
+            context: The context to use for answering
+            
+        Returns:
+            The generated answer
+        """
+        prompt = f"""Based on the following context, please answer the question. If the answer cannot be found in the context, please say so.
+
+Context: {context}
+
+Question: {question}
+
+Answer:"""
+        
+        try:
+            response = self.groq_client.chat.completions.create(
+                model="llama3-8b-8192",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return "I apologize, but I encountered an error while generating the answer."
+
+    def perform_rag_query(self, question: str, page_number: int = None, vector_index=None, all_chunks_with_metadata: List[Dict] = None) -> Dict:
+        """
+        Perform RAG query using modular approach.
+        
+        Args:
+            question: The question to answer
+            page_number: Optional page number filter
+            vector_index: Optional custom vector index
+            all_chunks_with_metadata: Optional custom chunks metadata
+            
+        Returns:
+            Dictionary with question, answer, and source pages
+        """
+        print(f"[DEBUG] Query received: question='{question}', page_number={page_number}")
+        
+        # Step 1: Search for relevant chunks
+        relevant_chunks_content, source_pages = self._search_relevant_chunks(
+            question, page_number, vector_index, all_chunks_with_metadata
+        )
+        
+        if not relevant_chunks_content:
+            return {
+                "question": question,
+                "answer": "No relevant information found in the document.",
+                "source_pages": []
+            }
+        
+        # Step 2: Get graph context
         graph_context = self._query_graph_for_context(question)
+        
+        # Step 3: Combine contexts
         full_context = " ".join(relevant_chunks_content)
         if graph_context:
             full_context = f"{graph_context}\n\n{full_context}"
 
         print(f"[DEBUG] Relevant chunks content (before LLM): {relevant_chunks_content}")
         print(f"[DEBUG] Source pages: {source_pages}")
-
-        context = full_context
-        print(f"[DEBUG] Context passed to LLM: {context[:500]}...") # Print first 500 chars of context
-        answer = self._generate_answer_with_llm(question, context)
+        print(f"[DEBUG] Context passed to LLM: {full_context[:500]}...")  # Print first 500 chars of context
+        
+        # Step 4: Generate answer with LLM
+        answer = self._generate_answer_with_llm(question, full_context)
         print(f"[DEBUG] Answer from LLM: {answer}")
 
         return {
