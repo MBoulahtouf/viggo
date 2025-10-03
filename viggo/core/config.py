@@ -4,8 +4,9 @@ import os
 
 class Settings(BaseSettings):
     groq_api_key: str
+    # Database Configuration
     neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
+    neo4j_user: str
     neo4j_password: str
     mlflow_tracking_uri: str = "http://localhost:5000"
     wandb_project: str = "viggo-lore-companion"
