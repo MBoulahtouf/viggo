@@ -21,11 +21,10 @@ dependencies = [
     "spacy (>=3.8.7,<4.0.0)",
     "pydantic-settings (>=2.9.1,<3.0.0)",
     "azure-search-documents (>=11.4.0,<12.0.0)",
+    "redis (>=5.0.0,<6.0.0)",
+    "elasticsearch (>=8.0.0,<9.0.0)",
     "mlflow",
     "wandb",
-    
-    
-    
 ]
 
 [tool.poetry.group.dev.dependencies]

@@ -25,3 +25,6 @@ test_graph.py
 faiss_index.bin
 document_data.pkl
 uvicorn_output.txt
+
+# .cursorignore
+.cursorignore   

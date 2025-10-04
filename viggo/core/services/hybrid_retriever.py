@@ -14,6 +14,7 @@ from viggo.core.config import settings
 from viggo.core.services.hybrid_search_service import HybridSearchService
 from viggo.core.services.graph_service import GraphService
 from viggo.core.services.performance_optimizer import PerformanceOptimizer
+from viggo.core.services.redis_service import RedisService
 
 
 class HybridRetriever:
@@ -33,8 +34,11 @@ class HybridRetriever:
         self.hybrid_search_service = HybridSearchService(model_name)
         self.graph_service = None  # Will be set by RAG service if available
         
-        # Initialize performance optimizer
-        self.performance_optimizer = PerformanceOptimizer()
+        # Initialize Redis cache service first
+        self.redis_cache = RedisService(model_name)
+        
+        # Initialize performance optimizer with Redis cache service
+        self.performance_optimizer = PerformanceOptimizer(redis_cache_service=self.redis_cache)
         
         # Weights for fusion ranking (Neo4j > Semantic > Keyword)
         self.weights = {
@@ -46,6 +50,13 @@ class HybridRetriever:
         # Performance tracking
         self.retrieval_times = {}
         self.source_usage_stats = {"neo4j": 0, "semantic": 0, "keyword": 0}
+        
+        # Cache configuration
+        self.cache_enabled = self.redis_cache.is_available()
+        if self.cache_enabled:
+            print("[HybridRetriever] Redis cache enabled")
+        else:
+            print("[HybridRetriever] Redis cache disabled - using in-memory cache only")
     
     async def retrieve(self, query: str, top_k: int = 5, page_filter: Optional[int] = None) -> Dict:
         """
@@ -62,10 +73,18 @@ class HybridRetriever:
         start_time = time.time()
         self.performance_optimizer.total_queries += 1
         
-        # Check query cache first
+        # Check Redis cache first (primary cache)
+        cached_result = None
+        if self.cache_enabled:
+            cached_result = self.redis_cache.get_cached_query_result(query, top_k, page_filter)
+            if cached_result:
+                print(f"[REDIS CACHE HIT] Query result found in Redis cache")
+                return cached_result
+        
+        # Check in-memory cache as fallback
         cached_result = self.performance_optimizer.get_cached_query_result(query, top_k, page_filter)
         if cached_result:
-            print(f"[CACHE HIT] Query result found in cache")
+            print(f"[MEMORY CACHE HIT] Query result found in memory cache")
             return cached_result
         
         # Run all retrieval methods in parallel with adaptive timeouts
@@ -125,25 +144,50 @@ class HybridRetriever:
         }
         
         # Cache the result for future queries
+        if self.cache_enabled:
+            # Cache in Redis (primary cache)
+            self.redis_cache.cache_query_result(query, top_k, page_filter, result)
+        
+        # Also cache in memory as backup
         self.performance_optimizer.cache_query_result(query, top_k, page_filter, result)
         
         return result
     
     def _semantic_search(self, query: str, top_k: int, page_filter: Optional[int] = None) -> List[Dict]:
         """
-        Perform semantic search using FAISS vector similarity with embedding caching.
+        Perform semantic search using FAISS vector similarity with Redis embedding caching.
         """
         try:
             if not self.vector_index or not self.all_chunks_with_metadata:
                 return []
             
-            # Generate query embedding with caching
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer(self.model_name)
-            query_embedding = self.performance_optimizer.get_embedding(query, model)
+            # Generate query embedding with Redis caching
+            query_embedding = None
+            if self.cache_enabled:
+                query_embedding = self.redis_cache.get_cached_embedding(query)
+            
+            if query_embedding is None:
+                # Generate new embedding
+                from sentence_transformers import SentenceTransformer
+                model = SentenceTransformer(self.model_name)
+                query_embedding = self.performance_optimizer.get_embedding(query, model)
+                
+                # Cache the embedding in Redis
+                if self.cache_enabled:
+                    self.redis_cache.cache_embedding(query, query_embedding)
+                    print(f"[Redis] Cached embedding for query: {query[:50]}...")
+            
+            # Ensure query_embedding is a numpy array
+            if isinstance(query_embedding, list):
+                import numpy as np
+                query_embedding = np.array(query_embedding)
+            
+            # Ensure it's 2D for FAISS search
+            if query_embedding.ndim == 1:
+                query_embedding = query_embedding.reshape(1, -1)
             
             # Search FAISS index
-            distances, indices = self.vector_index.search([query_embedding], top_k)
+            distances, indices = self.vector_index.search(query_embedding, top_k)
             
             # Get relevant chunks
             results = []
@@ -333,9 +377,23 @@ class HybridRetriever:
         # Add performance optimizer stats
         optimizer_stats = self.performance_optimizer.get_performance_stats()
         
+        # Add Redis cache stats
+        cache_stats = {}
+        if self.cache_enabled:
+            cache_stats = {
+                "redis_cache": self.redis_cache.get_cache_stats(),
+                "redis_health": self.redis_cache.health_check()
+            }
+        else:
+            cache_stats = {
+                "redis_cache": {"status": "disabled"},
+                "redis_health": {"status": "disabled"}
+            }
+        
         return {
             **base_stats,
-            "optimization": optimizer_stats
+            "optimization": optimizer_stats,
+            "cache": cache_stats
         }
     
     def create_hybrid_prompt(self, query: str, results: List[Dict]) -> str:
@@ -408,3 +466,58 @@ Answer:"""
             context += f"- Page {result.get('page', 'N/A')}: {result['content'][:200]}...\n"
         
         return context
+    
+    def clear_cache(self, cache_type: str = "all") -> bool:
+        """
+        Clear cache entries.
+        
+        Args:
+            cache_type: Type of cache to clear ("all", "query", "embedding", "memory")
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        success = True
+        
+        if cache_type in ["all", "query", "embedding"] and self.cache_enabled:
+            if cache_type == "all":
+                success = self.redis_cache.clear_cache()
+            elif cache_type == "query":
+                success = self.redis_cache.clear_cache(f"{self.redis_cache.cache_prefix}:query:*")
+            elif cache_type == "embedding":
+                success = self.redis_cache.clear_cache(f"{self.redis_cache.cache_prefix}:embedding:*")
+        
+        if cache_type in ["all", "memory"]:
+            # Clear in-memory cache
+            self.performance_optimizer.clear_cache()
+        
+        if success:
+            print(f"[HybridRetriever] Successfully cleared {cache_type} cache")
+        
+        return success
+    
+    def get_cache_info(self) -> Dict:
+        """
+        Get detailed cache information.
+        
+        Returns:
+            Dictionary with cache information
+        """
+        cache_info = {
+            "cache_enabled": self.cache_enabled,
+            "cache_type": "redis" if self.cache_enabled else "memory_only"
+        }
+        
+        if self.cache_enabled:
+            cache_info.update({
+                "redis_stats": self.redis_cache.get_cache_stats(),
+                "redis_health": self.redis_cache.health_check()
+            })
+        
+        # Add memory cache info
+        cache_info["memory_cache"] = {
+            "performance_optimizer": "available",
+            "cache_size": getattr(self.performance_optimizer, 'cache_size', 0)
+        }
+        
+        return cache_info

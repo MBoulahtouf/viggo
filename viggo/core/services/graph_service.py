@@ -478,3 +478,94 @@ class GraphService:
         entity_dicts = [{"name": node.name, "labels": node.labels} for node in all_entities]
         
         return self.aliasing_service.suggest_aliases(entity_name, entity_dicts)
+    
+    def get_entity_details(self, entity_name: str, entity_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed information about a specific entity.
+        
+        Args:
+            entity_name: The entity name to look up
+            entity_type: Optional entity type filter
+            
+        Returns:
+            Dictionary containing entity details or None if not found
+        """
+        try:
+            canonical_name = self.resolve_entity_name(entity_name)
+            
+            # Build query based on whether we have entity type
+            if entity_type:
+                query = """
+                MATCH (n {name: $name})
+                WHERE $type IN labels(n)
+                RETURN n.name as name, labels(n) as labels, properties(n) as properties
+                """
+                params = {"name": canonical_name, "type": entity_type}
+            else:
+                query = """
+                MATCH (n {name: $name})
+                RETURN n.name as name, labels(n) as labels, properties(n) as properties
+                """
+                params = {"name": canonical_name}
+            
+            with self.driver.session() as session:
+                result = session.run(query, params)
+                record = result.single()
+                
+                if record:
+                    return {
+                        "name": record["name"],
+                        "labels": record["labels"],
+                        "properties": dict(record["properties"])
+                    }
+                return None
+                
+        except Exception as e:
+            logging.error(f"Error getting entity details for {entity_name}: {e}")
+            return None
+    
+    def find_relationships(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Find relationships based on a query string.
+        
+        Args:
+            query: The query string to search for relationships
+            
+        Returns:
+            List of relationship dictionaries
+        """
+        try:
+            # Extract potential entity names from query
+            query_lower = query.lower()
+            
+            # Simple relationship search - look for connections between entities
+            cypher_query = """
+            MATCH (a)-[r]->(b)
+            WHERE toLower(a.name) CONTAINS $query 
+               OR toLower(b.name) CONTAINS $query
+               OR toLower(type(r)) CONTAINS $query
+            RETURN a.name as source, type(r) as relationship_type, b.name as target, 
+                   properties(r) as rel_properties, labels(a) as source_labels, labels(b) as target_labels
+            LIMIT 10
+            """
+            
+            with self.driver.session() as session:
+                result = session.run(cypher_query, {"query": query_lower})
+                relationships = []
+                
+                for record in result:
+                    relationships.append({
+                        "source": record["source"],
+                        "target": record["target"],
+                        "relationship_type": record["relationship_type"],
+                        "properties": dict(record["rel_properties"]),
+                        "source_labels": record["source_labels"],
+                        "target_labels": record["target_labels"],
+                        "description": f"{record['source']} {record['relationship_type']} {record['target']}"
+                    })
+                
+                return relationships
+                
+        except Exception as e:
+            logging.error(f"Error finding relationships for query '{query}': {e}")
+            return []

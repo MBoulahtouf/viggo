@@ -11,6 +11,8 @@ from viggo.core.config import settings
 from viggo.core.services.graph_service import GraphService
 from viggo.core.services.hybrid_search_service import HybridSearchService
 from viggo.core.services.hybrid_retriever import HybridRetriever
+from viggo.core.services.enhanced_entity_extractor import EnhancedEntityExtractor
+from viggo.core.services.hybrid_chunking_service import HybridChunkingService, ChunkLevel, ChunkingConfig
 from viggo.core.utils.entity_utils import filter_and_map_entities, get_entity_label_map, get_allowed_labels
 from viggo.core.processors import DocumentProcessorFactory
 
@@ -24,8 +26,15 @@ class RAGService:
         
         self.model = SentenceTransformer(model_name)
         self.nlp = spacy.load("en_core_web_sm") # Load spaCy model for sentence segmentation
+        self.enhanced_extractor = EnhancedEntityExtractor(self.nlp)
         self.groq_client = Groq(api_key=settings.groq_api_key)
         self.document_processor_factory = DocumentProcessorFactory()
+        
+        # Initialize hybrid chunking service
+        self.chunking_config = ChunkingConfig()
+        self.hybrid_chunking = HybridChunkingService(config=self.chunking_config)
+        
+        # Legacy storage for backward compatibility
         self.index = None
         self.documents = [] # Stores the actual text chunks
         self.all_chunks_with_metadata = [] # Stores chunks with metadata (page, etc.)
@@ -238,7 +247,7 @@ class RAGService:
     
     def _process_chunk(self, chunk_text: str, page_number: int, additional_metadata: Optional[Dict] = None) -> Dict:
         """
-        Process a single chunk to extract entities and relationships.
+        Process a single chunk to extract entities and relationships using enhanced extraction.
         
         Args:
             chunk_text: The text content of the chunk
@@ -248,9 +257,11 @@ class RAGService:
         Returns:
             Dictionary with chunk metadata including entities and relationships
         """
+        # Use enhanced entity extractor for better filtering and deduplication
+        entities = self.enhanced_extractor.extract_entities_enhanced(chunk_text, page_number)
+        
+        # Extract relationships using the enhanced entities
         chunk_doc = self.nlp(chunk_text)
-        # Filter and normalize entities using utility function
-        entities = filter_and_map_entities(chunk_doc, get_allowed_labels())
         relationships = self.extract_relationships(chunk_doc, entities)
         
         # Build base chunk metadata
@@ -267,8 +278,8 @@ class RAGService:
         if additional_metadata:
             chunk_metadata.update(additional_metadata)
         
-        print(f"[DEBUG] Filtered entities for chunk (page {page_number}): {entities}")
-        print(f"[DEBUG] Filtered relationships for chunk (page {page_number}): {relationships}")
+        print(f"[DEBUG] Enhanced entities for chunk (page {page_number}): {entities}")
+        print(f"[DEBUG] Enhanced relationships for chunk (page {page_number}): {relationships}")
         
         return chunk_metadata
     
@@ -336,6 +347,121 @@ class RAGService:
         self._initialize_hybrid_retriever()
         
         return len(documents), index, chunks_with_metadata
+
+    def process_document_enhanced(self, file_path: str) -> Tuple[int, IndexFlatL2, List[Dict]]:
+        """
+        Process document with enhanced entity extraction and content filtering.
+        
+        Args:
+            file_path: Path to the document file
+            
+        Returns:
+            Tuple of (num_chunks, vector_index, filtered_chunks_with_metadata)
+        """
+        print(f"🔍 Processing document with enhanced entity extraction: {file_path}")
+        
+        # Process document normally first
+        num_chunks, vector_index, chunks_with_metadata = self.process_document(file_path)
+        
+        # Apply enhanced processing to filter out noise and improve entities
+        print("🧹 Applying enhanced content filtering and entity processing...")
+        enhanced_chunks = self.enhanced_extractor.process_chunks_enhanced(chunks_with_metadata)
+        
+        print(f"✅ Enhanced processing complete:")
+        print(f"   Original chunks: {len(chunks_with_metadata)}")
+        print(f"   Filtered chunks: {len(enhanced_chunks)}")
+        print(f"   Filtered out: {len(chunks_with_metadata) - len(enhanced_chunks)} noisy chunks")
+        
+        return len(enhanced_chunks), vector_index, enhanced_chunks
+    
+    def process_document_hybrid_chunking(self, file_path: str) -> Dict:
+        """
+        Process document using the new hybrid chunking strategy for reduced noise.
+        
+        Args:
+            file_path: Path to the document file
+            
+        Returns:
+            Dictionary with hybrid chunking results and statistics
+        """
+        print(f"🏗️ Processing document with hybrid chunking strategy: {file_path}")
+        
+        # Step 1: Extract text using document processor
+        all_pages_data = self.document_processor_factory.process_document(file_path)
+        
+        # Step 2: Apply hybrid chunking strategy
+        chunking_result = self.hybrid_chunking.chunk_document_hierarchical(all_pages_data)
+        
+        # Step 3: Convert to legacy format for backward compatibility
+        legacy_chunks = self._convert_hybrid_to_legacy_format(chunking_result["chunks"])
+        
+        # Step 4: Build vector index from passage-level chunks
+        if legacy_chunks:
+            index, documents = self._build_vector_index(legacy_chunks)
+            
+            # Update instance variables
+            self.documents = documents
+            self.all_chunks_with_metadata = legacy_chunks
+            self.index = index
+            
+            # Save to disk
+            self._save_index(index, legacy_chunks)
+            
+            # Initialize hybrid retriever
+            self._initialize_hybrid_retriever()
+            
+            print(f"✅ Hybrid chunking processing complete:")
+            print(f"   Total chunks: {chunking_result['statistics']['total_chunks']}")
+            print(f"   Chapters: {len(chunking_result['chunks'].get(ChunkLevel.CHAPTER.value, []))}")
+            print(f"   Passages: {len(chunking_result['chunks'].get(ChunkLevel.PASSAGE.value, []))}")
+            print(f"   Overlapping: {len(chunking_result['chunks'].get(ChunkLevel.SENTENCE.value, []))}")
+            
+            return {
+                "file_path": file_path,
+                "num_chunks": len(legacy_chunks),
+                "vector_index": index,
+                "chunks_with_metadata": legacy_chunks,
+                "hybrid_chunking_result": chunking_result,
+                "processing_method": "hybrid_chunking"
+            }
+        else:
+            print("❌ No chunks generated from hybrid chunking")
+            return {
+                "file_path": file_path,
+                "num_chunks": 0,
+                "vector_index": None,
+                "chunks_with_metadata": [],
+                "hybrid_chunking_result": chunking_result,
+                "processing_method": "hybrid_chunking",
+                "error": "No chunks generated"
+            }
+    
+    def _convert_hybrid_to_legacy_format(self, hierarchical_chunks: Dict[str, List[Dict]]) -> List[Dict]:
+        """Convert hybrid chunking results to legacy format for backward compatibility."""
+        legacy_chunks = []
+        
+        # Use passage-level chunks as the primary chunks for legacy compatibility
+        passage_chunks = hierarchical_chunks.get(ChunkLevel.PASSAGE.value, [])
+        
+        for chunk in passage_chunks:
+            metadata = chunk["metadata"]
+            legacy_chunk = {
+                "content": chunk["content"],
+                "page": metadata.page_number,
+                "entities": metadata.entities,
+                "relationships": metadata.relationships,
+                "word_count": metadata.word_count,
+                "char_count": metadata.char_count,
+                "chapter_title": metadata.chapter_title,
+                "chunk_type": chunk["chunk_type"],
+                "lore_significance": metadata.lore_significance,
+                "chunk_id": chunk["id"],
+                "parent_id": metadata.parent_id,
+                "level": chunk["level"]
+            }
+            legacy_chunks.append(legacy_chunk)
+        
+        return legacy_chunks
 
     def process_document(self, file_path: str) -> Tuple[int, IndexFlatL2, List[Dict]]:
         """
