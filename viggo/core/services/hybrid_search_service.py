@@ -8,6 +8,7 @@ from azure.search.documents.models import VectorizedQuery
 from azure.core.credentials import AzureKeyCredential
 from sentence_transformers import SentenceTransformer
 from viggo.core.config import settings
+from viggo.core.services.content_filter_service import ContentFilterService
 
 
 class HybridSearchService:
@@ -18,15 +19,24 @@ class HybridSearchService:
     
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(model_name)
-        self.search_client = SearchClient(
-            endpoint=settings.elasticsearch_url,
-            index_name=f"{settings.elasticsearch_index_prefix}-documents",
-            credential=AzureKeyCredential(settings.elasticsearch_api_key)
-        )
-        self.index_client = SearchIndexClient(
-            endpoint=settings.elasticsearch_url,
-            credential=AzureKeyCredential(settings.elasticsearch_api_key)
-        )
+        self.content_filter = ContentFilterService()
+        
+        # Initialize Azure Search clients with error handling
+        try:
+            self.search_client = SearchClient(
+                endpoint=settings.elasticsearch_url,
+                index_name=f"{settings.elasticsearch_index_prefix}-documents",
+                credential=AzureKeyCredential(settings.elasticsearch_api_key)
+            )
+            self.index_client = SearchIndexClient(
+                endpoint=settings.elasticsearch_url,
+                credential=AzureKeyCredential(settings.elasticsearch_api_key)
+            )
+            print(f"[HybridSearchService] Successfully initialized with endpoint: {settings.elasticsearch_url}")
+        except Exception as e:
+            print(f"[HybridSearchService] Failed to initialize Azure Search clients: {e}")
+            self.search_client = None
+            self.index_client = None
     
     def create_index(self, index_name: str = None) -> bool:
         """
@@ -129,6 +139,14 @@ class HybridSearchService:
                         "facetable": True
                     },
                     {
+                        "name": "content_type",
+                        "type": "Edm.String",
+                        "searchable": False,
+                        "filterable": True,
+                        "sortable": False,
+                        "facetable": True
+                    },
+                    {
                         "name": "document_metadata",
                         "type": "Edm.String",
                         "searchable": False,
@@ -176,7 +194,7 @@ class HybridSearchService:
     
     def index_documents(self, documents: List[Dict], index_name: str = None) -> bool:
         """
-        Index documents in Azure Cognitive Search.
+        Index documents in Azure Cognitive Search with content filtering.
         
         Args:
             documents: List of document dictionaries
@@ -189,20 +207,37 @@ class HybridSearchService:
             index_name = f"{settings.elasticsearch_index_prefix}-documents"
         
         try:
+            # Filter documents to only include story content
+            print("🔍 Applying content filtering before indexing...")
+            filtered_docs, filter_stats = self.content_filter.filter_chunks_for_indexing(documents)
+            
+            print(f"📊 Content filtering results:")
+            print(f"   Total chunks: {filter_stats['total_chunks']}")
+            print(f"   Filtered out: {filter_stats['filtered_out']}")
+            print(f"   Story content: {filter_stats['story_content']}")
+            print(f"   Metadata: {filter_stats['metadata']}")
+            print(f"   Bibliography: {filter_stats['bibliography']}")
+            print(f"   Publisher info: {filter_stats['publisher_info']}")
+            print(f"   Technical: {filter_stats['technical']}")
+            print(f"   Preface: {filter_stats['preface']}")
+            
             # Prepare documents for indexing
             search_documents = []
-            for i, doc in enumerate(documents):
+            for i, doc in enumerate(filtered_docs):
+                # Add content type classification
+                enhanced_doc = self.content_filter.add_content_type_to_chunk(doc)
+                
                 search_doc = {
                     "id": str(i),
-                    "content": doc["content"],
-                    "page": doc.get("page", 0),
-                    "word_count": doc.get("word_count", len(doc["content"].split())),
-                    "char_count": doc.get("char_count", len(doc["content"])),
-                    "entities": doc.get("entities", []),
-                    "entity_labels": doc.get("entity_labels", []),
-                    "chapter_title": doc.get("chapter_title", ""),
-                    "chunk_type": doc.get("chunk_type", "standard"),
-                    "document_metadata": json.dumps(doc.get("document_metadata", {}))
+                    "content": enhanced_doc["content"],
+                    "page": enhanced_doc.get("page", 0),
+                    "word_count": enhanced_doc.get("word_count", len(enhanced_doc["content"].split())),
+                    "char_count": enhanced_doc.get("char_count", len(enhanced_doc["content"])),
+                    "entities": enhanced_doc.get("entities", []),
+                    "entity_labels": enhanced_doc.get("entity_labels", []),
+                    "chapter_title": enhanced_doc.get("chapter_title", ""),
+                    "chunk_type": enhanced_doc.get("chunk_type", "standard"),
+                    "document_metadata": json.dumps(enhanced_doc.get("document_metadata", {}))
                 }
                 search_documents.append(search_doc)
             
@@ -217,7 +252,7 @@ class HybridSearchService:
                     print(f"Error: {doc.error_message}")
                 return False
             
-            print(f"Successfully indexed {len(search_documents)} documents")
+            print(f"✅ Successfully indexed {len(search_documents)} story content documents")
             return True
             
         except Exception as e:
@@ -257,11 +292,17 @@ class HybridSearchService:
             List of search results
         """
         try:
+            # Check if search client is available
+            if not self.search_client:
+                print("[HybridSearchService] Search client not available, returning empty results")
+                return []
+            
             search_params = {
                 "top": k,
                 "include_total_count": True
             }
             
+            # Build filter expression (content filtering is done at indexing time)
             if page_filter is not None:
                 search_params["filter"] = f"page le {page_filter}"
             
