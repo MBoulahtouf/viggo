@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     
     # Database Configuration
     neo4j_uri: str = "bolt://20.216.195.227:7687"
-    neo4j_user: str = "neo4j"
+    neo4j_user: str
     neo4j_password: str
     
     # Search Configuration
