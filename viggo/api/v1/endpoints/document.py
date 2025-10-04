@@ -4,8 +4,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from viggo.core.config import settings
 from viggo.models.schemas import DocumentInfoResponse, DocumentUploadResponse
-from viggo.core.services.rag_service import RAGService
-from viggo.core.services.graph_service import GraphService
+from viggo.core.services.implementations.rag_service_impl import RAGService
+from viggo.core.services.implementations.graph_service_impl import GraphService
 from viggo.dependencies import get_rag_service, get_graph_service
 from viggo.core.utils.file_ops import clear_indexes_and_graph
 

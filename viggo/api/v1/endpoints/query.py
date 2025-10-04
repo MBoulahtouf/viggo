@@ -1,7 +1,7 @@
 # viggo/api/v1/endpoints/query.py
 from fastapi import APIRouter, HTTPException, Depends
 from viggo.models.schemas import QueryRequest, QueryResponse
-from viggo.core.services.rag_service import RAGService
+from viggo.core.services.implementations.rag_service_impl import RAGService
 from viggo.dependencies import get_rag_service
 import logging
 

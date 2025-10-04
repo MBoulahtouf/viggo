@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Dict, Any, List, Optional
-from viggo.core.services.graph_service import GraphService, PaginationParams
+from viggo.core.services.implementations.graph_service_impl import GraphService, PaginationParams
 from viggo.dependencies import get_graph_service
 from viggo.models.schemas import NodeListResponse, GroupedNodeListResponse, EntityGraphResponse
 
