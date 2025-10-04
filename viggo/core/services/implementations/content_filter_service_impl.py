@@ -1,24 +1,17 @@
 """
-Content filtering service for Azure Cognitive Search indexing.
-Filters out metadata, prefaces, bibliography, and other non-lore content during indexing.
+Concrete implementation of content filter service following SOLID principles.
 """
 
 import re
 from typing import Dict, List, Optional, Tuple
 from enum import Enum
 
-
-class ContentType(Enum):
-    """Types of content that can be filtered."""
-    STORY_CONTENT = "story_content"
-    METADATA = "metadata"
-    BIBLIOGRAPHY = "bibliography"
-    PREFACE = "preface"
-    PUBLISHER_INFO = "publisher_info"
-    TECHNICAL = "technical"
+from viggo.core.services.interfaces.content_filter import (
+    IContentFilterService, ContentType
+)
 
 
-class ContentFilterService:
+class ContentFilterService(IContentFilterService):
     """
     Service for filtering content during Azure Cognitive Search indexing.
     Prevents non-lore content from being indexed in the first place.

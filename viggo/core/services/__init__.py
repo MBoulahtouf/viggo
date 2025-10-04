@@ -57,10 +57,16 @@ from .implementations import (
     GraphService, HybridRetriever, HybridSearchService, PerformanceOptimizer, RedisService, AliasingService
 )
 
-# Utility services (concrete implementations - no interfaces needed)
-from .content_filter_service import ContentFilterService
-from .enhanced_entity_extractor import EnhancedEntityExtractor
-from .hybrid_chunking_service import HybridChunkingService
+# Content processing services (now with interfaces)
+from .interfaces import (
+    IContentFilterService, ContentType,
+    IContentFilter, IEntityDeduplicator, IEntityDisambiguator, IEnhancedEntityExtractor,
+    IHybridChunkingService, ChunkLevel, ChunkType, ChunkMetadata, ChunkingConfig
+)
+from .implementations import (
+    ContentFilterService, ContentFilter, EntityDeduplicator, EntityDisambiguator, 
+    EnhancedEntityExtractor, HybridChunkingService
+)
 
 __all__ = [
     # New SOLID architecture
@@ -88,8 +94,12 @@ __all__ = [
     'ConcreteRAGService', 'ConcreteRAGOrchestrator',
     'GraphService', 'HybridRetriever', 'HybridSearchService', 'PerformanceOptimizer', 'RedisService', 'AliasingService',
     
-    # Utility services
-    'ContentFilterService',
-    'EnhancedEntityExtractor',
-    'HybridChunkingService'
+    # Content processing interfaces
+    'IContentFilterService', 'ContentType',
+    'IContentFilter', 'IEntityDeduplicator', 'IEntityDisambiguator', 'IEnhancedEntityExtractor',
+    'IHybridChunkingService', 'ChunkLevel', 'ChunkType', 'ChunkMetadata', 'ChunkingConfig',
+    
+    # Content processing implementations
+    'ContentFilterService', 'ContentFilter', 'EntityDeduplicator', 'EntityDisambiguator', 
+    'EnhancedEntityExtractor', 'HybridChunkingService'
 ]

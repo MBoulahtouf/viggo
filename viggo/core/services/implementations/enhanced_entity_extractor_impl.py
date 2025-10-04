@@ -1,11 +1,5 @@
 """
-Enhanced entity extraction service for improved content filtering and entity deduplication.
-
-This service addresses:
-1. Content filtering to skip metadata, prefaces, title pages
-2. Entity deduplication (e.g., "Olney" vs "Thomas Olney")
-3. Entity disambiguation (character vs organization conflicts)
-4. Noise filtering (publisher info, file paths, etc.)
+Concrete implementation of enhanced entity extractor following SOLID principles.
 """
 
 import re
@@ -16,9 +10,12 @@ from difflib import SequenceMatcher
 from spacy.tokens import Doc, Span
 
 from viggo.core.utils.entity_utils import filter_and_map_entities, get_allowed_labels
+from viggo.core.services.interfaces.entity_extractor import (
+    IContentFilter, IEntityDeduplicator, IEntityDisambiguator, IEnhancedEntityExtractor
+)
 
 
-class ContentFilter:
+class ContentFilter(IContentFilter):
     """Filters out non-story content like metadata, prefaces, and publisher info."""
     
     def __init__(self):
@@ -138,7 +135,7 @@ class ContentFilter:
         return self.is_story_content(chunk_content)
 
 
-class EntityDeduplicator:
+class EntityDeduplicator(IEntityDeduplicator):
     """Handles entity deduplication and normalization."""
     
     def __init__(self):
@@ -244,7 +241,7 @@ class EntityDeduplicator:
         return merged
 
 
-class EntityDisambiguator:
+class EntityDisambiguator(IEntityDisambiguator):
     """Handles entity type disambiguation and conflict resolution."""
     
     def __init__(self):
@@ -342,7 +339,7 @@ class EntityDisambiguator:
         return entity_label
 
 
-class EnhancedEntityExtractor:
+class EnhancedEntityExtractor(IEnhancedEntityExtractor):
     """
     Enhanced entity extractor with content filtering, deduplication, and disambiguation.
     """

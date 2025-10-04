@@ -1,12 +1,5 @@
 """
-Hybrid Chunking Service for Viggo - Implements hierarchical chunking strategy
-to reduce noise and improve retrieval accuracy in book lore knowledge exploration.
-
-This service implements:
-1. Pre-chunking: Chapter/section-level indexing for broad context
-2. Post-chunking: Dynamic passage splitting for detailed answers
-3. Overlapping chunks: For critical lore sections to reduce noise
-4. Hierarchical indexing: Multi-level exploration (book → chapter → passage)
+Concrete implementation of hybrid chunking service following SOLID principles.
 """
 
 import re
@@ -17,93 +10,30 @@ from dataclasses import dataclass
 from collections import defaultdict
 import numpy as np
 
-from viggo.core.services.content_filter_service import ContentFilterService
-from viggo.core.services.enhanced_entity_extractor import EnhancedEntityExtractor
+from viggo.core.services.interfaces.chunking_service import (
+    IHybridChunkingService, ChunkLevel, ChunkType, ChunkMetadata, ChunkingConfig
+)
+from viggo.core.services.interfaces.content_filter import IContentFilterService
+from viggo.core.services.interfaces.entity_extractor import IEnhancedEntityExtractor
+from .content_filter_service_impl import ContentFilterService
+from .enhanced_entity_extractor_impl import EnhancedEntityExtractor
 
 
-class ChunkLevel(Enum):
-    """Hierarchical chunk levels for multi-granularity retrieval."""
-    BOOK = "book"
-    CHAPTER = "chapter"
-    SECTION = "section"
-    PASSAGE = "passage"
-    SENTENCE = "sentence"
-
-
-class ChunkType(Enum):
-    """Types of chunks for different retrieval strategies."""
-    FULL_CHAPTER = "full_chapter"
-    PARAGRAPH_GROUP = "paragraph_group"
-    OVERLAPPING_PASSAGE = "overlapping_passage"
-    STANDARD_PASSAGE = "standard_passage"
-    CRITICAL_LORE = "critical_lore"
-    DIALOGUE_BLOCK = "dialogue_block"
-    NARRATIVE_BLOCK = "narrative_block"
-
-
-@dataclass
-class ChunkMetadata:
-    """Metadata for a chunk with hierarchical information."""
-    level: ChunkLevel
-    chunk_type: ChunkType
-    parent_id: Optional[str] = None
-    children_ids: List[str] = None
-    word_count: int = 0
-    char_count: int = 0
-    page_number: int = 0
-    chapter_title: str = ""
-    section_title: str = ""
-    entities: List[Dict] = None
-    relationships: List[Dict] = None
-    content_type: str = "story_content"
-    lore_significance: float = 0.0  # 0.0 to 1.0, higher = more important for lore
-    overlap_ratio: float = 0.0  # For overlapping chunks
-    
-    def __post_init__(self):
-        if self.children_ids is None:
-            self.children_ids = []
-        if self.entities is None:
-            self.entities = []
-        if self.relationships is None:
-            self.relationships = []
-
-
-@dataclass
-class ChunkingConfig:
-    """Configuration for hybrid chunking strategy."""
-    # Pre-chunking settings
-    max_chapter_words: int = 2000
-    min_chapter_words: int = 100
-    
-    # Post-chunking settings
-    max_passage_words: int = 400
-    min_passage_words: int = 50
-    passage_overlap_ratio: float = 0.2  # 20% overlap
-    
-    # Overlapping chunk settings
-    critical_lore_threshold: float = 0.7  # Entities + context score
-    max_overlap_chunks: int = 3
-    
-    # Hierarchical settings
-    enable_hierarchical: bool = True
-    max_children_per_parent: int = 10
-    
-    # Content filtering
-    enable_content_filtering: bool = True
-    skip_metadata_pages: int = 2  # Skip first N pages
-
-
-class HybridChunkingService:
+class HybridChunkingService(IHybridChunkingService):
     """
     Hybrid chunking service that implements hierarchical chunking strategy
     to reduce noise and improve retrieval accuracy.
     """
     
-    def __init__(self, nlp_model=None, config: ChunkingConfig = None):
+    def __init__(self, 
+                 nlp_model=None, 
+                 config: ChunkingConfig = None,
+                 content_filter: IContentFilterService = None,
+                 enhanced_extractor: IEnhancedEntityExtractor = None):
         self.nlp = nlp_model or spacy.load("en_core_web_sm")
         self.config = config or ChunkingConfig()
-        self.content_filter = ContentFilterService()
-        self.enhanced_extractor = EnhancedEntityExtractor(self.nlp)
+        self.content_filter = content_filter or ContentFilterService()
+        self.enhanced_extractor = enhanced_extractor or EnhancedEntityExtractor(self.nlp)
         
         # Chunk storage with hierarchical relationships
         self.chunks_by_level = defaultdict(list)

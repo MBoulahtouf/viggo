@@ -29,6 +29,13 @@ from .storage_impl import (
 from .rag_service_impl import ConcreteRAGService
 from .rag_orchestrator import ConcreteRAGOrchestrator
 
+# Content processing implementations
+from .content_filter_service_impl import ContentFilterService
+from .enhanced_entity_extractor_impl import (
+    ContentFilter, EntityDeduplicator, EntityDisambiguator, EnhancedEntityExtractor
+)
+from .hybrid_chunking_service_impl import HybridChunkingService
+
 # Core service implementations
 from .graph_service_impl import GraphService
 from .hybrid_retriever_impl import HybridRetriever
@@ -55,6 +62,9 @@ __all__ = [
     
     # RAG
     'ConcreteRAGService', 'ConcreteRAGOrchestrator',
+    
+    # Content processing implementations
+    'ContentFilterService', 'ContentFilter', 'EntityDeduplicator', 'EntityDisambiguator', 'EnhancedEntityExtractor', 'HybridChunkingService',
     
     # Core service implementations
     'GraphService', 'HybridRetriever', 'HybridSearchService', 'PerformanceOptimizer', 'RedisService', 'AliasingService'

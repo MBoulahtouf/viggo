@@ -55,6 +55,19 @@ from .aliasing_service import (
     IAliasingService, AliasMapping, CanonicalGroup
 )
 
+# Content processing interfaces
+from .content_filter import (
+    IContentFilterService, ContentType
+)
+
+from .entity_extractor import (
+    IContentFilter, IEntityDeduplicator, IEntityDisambiguator, IEnhancedEntityExtractor
+)
+
+from .chunking_service import (
+    IHybridChunkingService, ChunkLevel, ChunkType, ChunkMetadata, ChunkingConfig
+)
+
 __all__ = [
     # Document processing
     'DocumentProcessor', 'DocumentProcessorFactory', 'DocumentMetadata', 'DocumentPage',
@@ -80,5 +93,10 @@ __all__ = [
     'IHybridSearchService',
     'IPerformanceOptimizer',
     'IRedisService',
-    'IAliasingService', 'AliasMapping', 'CanonicalGroup'
+    'IAliasingService', 'AliasMapping', 'CanonicalGroup',
+    
+    # Content processing interfaces
+    'IContentFilterService', 'ContentType',
+    'IContentFilter', 'IEntityDeduplicator', 'IEntityDisambiguator', 'IEnhancedEntityExtractor',
+    'IHybridChunkingService', 'ChunkLevel', 'ChunkType', 'ChunkMetadata', 'ChunkingConfig'
 ]

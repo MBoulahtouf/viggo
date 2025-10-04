@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from viggo.core.services.interfaces.chunking import (
     ChunkingStrategy, ChunkingService, ChunkingResult, Chunk, ChunkMetadata, ChunkLevel
 )
-from viggo.core.services.hybrid_chunking_service import HybridChunkingService, ChunkingConfig
+from .hybrid_chunking_service_impl import HybridChunkingService, ChunkingConfig
 
 
 class HybridChunkingStrategy(ChunkingStrategy):

@@ -12,7 +12,7 @@ from azure.core.credentials import AzureKeyCredential
 from sentence_transformers import SentenceTransformer
 from viggo.core.config import settings
 from viggo.core.services.interfaces.hybrid_search_service import IHybridSearchService
-from viggo.core.services.content_filter_service import ContentFilterService
+from .content_filter_service_impl import ContentFilterService
 
 
 class HybridSearchService(IHybridSearchService):
