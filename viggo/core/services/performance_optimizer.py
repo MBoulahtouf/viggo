@@ -13,6 +13,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import lru_cache
 import numpy as np
+from viggo.core.config import settings
 
 @dataclass
 class PerformanceMetrics:
@@ -39,111 +40,47 @@ class PerformanceMetrics:
             self.success_rate = min(1.0, self.success_rate + 0.01)
 
 class EmbeddingCache:
-    """Cache for embeddings to avoid recomputation."""
+    """Cache for embeddings using in-memory storage with optional Redis backing."""
     
-    def __init__(self, cache_size: int = 1000, cache_file: str = "embedding_cache.pkl"):
-        self.cache_size = cache_size
-        self.cache_file = cache_file
-        self.cache: Dict[str, np.ndarray] = {}
-        self.access_times: Dict[str, float] = {}
-        self._load_cache()
-    
-    def _load_cache(self):
-        """Load cache from disk if it exists."""
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, 'rb') as f:
-                    data = pickle.load(f)
-                    self.cache = data.get('cache', {})
-                    self.access_times = data.get('access_times', {})
-                print(f"Loaded embedding cache with {len(self.cache)} entries")
-            except Exception as e:
-                print(f"Failed to load embedding cache: {e}")
-    
-    def _save_cache(self):
-        """Save cache to disk."""
-        try:
-            data = {
-                'cache': self.cache,
-                'access_times': self.access_times
-            }
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(data, f)
-        except Exception as e:
-            print(f"Failed to save embedding cache: {e}")
-    
-    def _get_cache_key(self, text: str) -> str:
-        """Generate cache key for text."""
-        return hashlib.md5(text.encode()).hexdigest()
+    def __init__(self, cache_size: int = None, redis_cache_service=None):
+        self.cache_size = cache_size or settings.cache_max_size
+        self.redis_cache_service = redis_cache_service
+        self.memory_cache = {}  # In-memory fallback cache
     
     def get(self, text: str) -> Optional[np.ndarray]:
         """Get embedding from cache."""
-        key = self._get_cache_key(text)
-        if key in self.cache:
-            self.access_times[key] = time.time()
-            return self.cache[key]
-        return None
+        # Try Redis cache first if available
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            cached = self.redis_cache_service.get_cached_embedding(text)
+            if cached is not None:
+                return cached
+        
+        # Fallback to memory cache
+        return self.memory_cache.get(text)
     
     def put(self, text: str, embedding: np.ndarray):
         """Store embedding in cache."""
-        key = self._get_cache_key(text)
+        # Store in Redis if available
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            self.redis_cache_service.cache_embedding(text, embedding)
         
-        # Evict oldest entries if cache is full
-        if len(self.cache) >= self.cache_size:
-            self._evict_oldest()
-        
-        self.cache[key] = embedding
-        self.access_times[key] = time.time()
-    
-    def _evict_oldest(self):
-        """Evict the least recently used entry."""
-        if not self.access_times:
-            return
-        
-        oldest_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
-        del self.cache[oldest_key]
-        del self.access_times[oldest_key]
+        # Also store in memory cache
+        if len(self.memory_cache) < self.cache_size:
+            self.memory_cache[text] = embedding
     
     def clear(self):
-        """Clear the cache."""
-        self.cache.clear()
-        self.access_times.clear()
-        if os.path.exists(self.cache_file):
-            os.remove(self.cache_file)
+        """Clear the embedding cache."""
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            self.redis_cache_service.clear_cache("embedding")
+        self.memory_cache.clear()
 
 class QueryResultCache:
-    """Cache for query results to avoid redundant processing."""
+    """Cache for query results using in-memory storage with optional Redis backing."""
     
-    def __init__(self, cache_size: int = 500, cache_file: str = "query_cache.pkl"):
-        self.cache_size = cache_size
-        self.cache_file = cache_file
-        self.cache: Dict[str, Dict] = {}
-        self.access_times: Dict[str, float] = {}
-        self._load_cache()
-    
-    def _load_cache(self):
-        """Load cache from disk if it exists."""
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, 'rb') as f:
-                    data = pickle.load(f)
-                    self.cache = data.get('cache', {})
-                    self.access_times = data.get('access_times', {})
-                print(f"Loaded query cache with {len(self.cache)} entries")
-            except Exception as e:
-                print(f"Failed to load query cache: {e}")
-    
-    def _save_cache(self):
-        """Save cache to disk."""
-        try:
-            data = {
-                'cache': self.cache,
-                'access_times': self.access_times
-            }
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(data, f)
-        except Exception as e:
-            print(f"Failed to save query cache: {e}")
+    def __init__(self, cache_size: int = None, redis_cache_service=None):
+        self.cache_size = cache_size or settings.cache_max_size
+        self.redis_cache_service = redis_cache_service
+        self.memory_cache = {}  # In-memory fallback cache
     
     def _get_cache_key(self, query: str, top_k: int, page_filter: Optional[int] = None) -> str:
         """Generate cache key for query parameters."""
@@ -152,47 +89,79 @@ class QueryResultCache:
     
     def get(self, query: str, top_k: int, page_filter: Optional[int] = None) -> Optional[Dict]:
         """Get cached query result."""
-        key = self._get_cache_key(query, top_k, page_filter)
-        if key in self.cache:
-            self.access_times[key] = time.time()
-            return self.cache[key]
-        return None
+        # Try Redis cache first if available
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            cached = self.redis_cache_service.get_cached_query_result(query, top_k, page_filter)
+            if cached is not None:
+                return cached
+        
+        # Fallback to memory cache
+        cache_key = self._get_cache_key(query, top_k, page_filter)
+        return self.memory_cache.get(cache_key)
     
     def put(self, query: str, top_k: int, page_filter: Optional[int], result: Dict):
         """Store query result in cache."""
-        key = self._get_cache_key(query, top_k, page_filter)
+        # Store in Redis if available
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            self.redis_cache_service.cache_query_result(query, top_k, page_filter, result)
         
-        # Evict oldest entries if cache is full
-        if len(self.cache) >= self.cache_size:
-            self._evict_oldest()
-        
-        self.cache[key] = result
-        self.access_times[key] = time.time()
-    
-    def _evict_oldest(self):
-        """Evict the least recently used entry."""
-        if not self.access_times:
-            return
-        
-        oldest_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
-        del self.cache[oldest_key]
-        del self.access_times[oldest_key]
+        # Also store in memory cache
+        cache_key = self._get_cache_key(query, top_k, page_filter)
+        if len(self.memory_cache) < self.cache_size:
+            self.memory_cache[cache_key] = result
     
     def clear(self):
-        """Clear the cache."""
-        self.cache.clear()
-        self.access_times.clear()
-        if os.path.exists(self.cache_file):
-            os.remove(self.cache_file)
+        """Clear the query cache."""
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            self.redis_cache_service.clear_cache("query")
+        self.memory_cache.clear()
 
 class AdaptiveTimeoutManager:
     """Manages adaptive timeouts based on source performance."""
     
-    def __init__(self, base_timeout: float = 10.0, min_timeout: float = 2.0, max_timeout: float = 30.0):
+    def __init__(self, base_timeout: float = 10.0, min_timeout: float = 2.0, max_timeout: float = 30.0, redis_cache_service=None):
         self.base_timeout = base_timeout
         self.min_timeout = min_timeout
         self.max_timeout = max_timeout
         self.source_metrics: Dict[str, PerformanceMetrics] = defaultdict(PerformanceMetrics)
+        self.redis_cache_service = redis_cache_service
+        self._load_metrics_from_redis()
+    
+    def _load_metrics_from_redis(self):
+        """Load performance metrics from Redis cache."""
+        try:
+            if self.redis_cache_service and self.redis_cache_service.is_available():
+                cached_metrics = self.redis_cache_service.get_cached_performance_metrics("performance_metrics")
+                if cached_metrics:
+                    for source, metrics_data in cached_metrics.items():
+                        if source != "connected":  # Skip Redis connection status
+                            metrics = PerformanceMetrics()
+                            metrics.avg_response_time = metrics_data.get('avg_response_time', 0.0)
+                            metrics.success_rate = metrics_data.get('success_rate', 1.0)
+                            metrics.total_queries = metrics_data.get('total_queries', 0)
+                            # Convert recent_times back to deque if available
+                            recent_times = metrics_data.get('recent_times', [])
+                            if recent_times:
+                                metrics.recent_times = deque(recent_times, maxlen=10)
+                            self.source_metrics[source] = metrics
+        except Exception as e:
+            print(f"Failed to load performance metrics from Redis: {e}")
+    
+    def _save_metrics_to_redis(self):
+        """Save performance metrics to Redis cache."""
+        try:
+            if self.redis_cache_service and self.redis_cache_service.is_available():
+                metrics_data = {}
+                for source, metrics in self.source_metrics.items():
+                    metrics_data[source] = {
+                        'avg_response_time': metrics.avg_response_time,
+                        'success_rate': metrics.success_rate,
+                        'total_queries': metrics.total_queries,
+                        'recent_times': list(metrics.recent_times)
+                    }
+                self.redis_cache_service.cache_performance_metrics("performance_metrics", metrics_data)
+        except Exception as e:
+            print(f"Failed to save performance metrics to Redis: {e}")
     
     def get_timeout(self, source: str) -> float:
         """Get adaptive timeout for a source based on its performance."""
@@ -218,6 +187,9 @@ class AdaptiveTimeoutManager:
     def update_metrics(self, source: str, response_time: float, success: bool = True):
         """Update performance metrics for a source."""
         self.source_metrics[source].update(response_time, success)
+        # Save to Redis periodically (every 10 updates)
+        if self.source_metrics[source].total_queries % 10 == 0:
+            self._save_metrics_to_redis()
     
     def get_performance_summary(self) -> Dict[str, Dict]:
         """Get performance summary for all sources."""
@@ -235,13 +207,15 @@ class PerformanceOptimizer:
     """Main performance optimization coordinator."""
     
     def __init__(self, 
-                 embedding_cache_size: int = 1000,
-                 query_cache_size: int = 500,
-                 base_timeout: float = 10.0):
+                 embedding_cache_size: int = None,
+                 query_cache_size: int = None,
+                 base_timeout: float = 10.0,
+                 redis_cache_service=None):
         
-        self.embedding_cache = EmbeddingCache(embedding_cache_size)
-        self.query_cache = QueryResultCache(query_cache_size)
-        self.timeout_manager = AdaptiveTimeoutManager(base_timeout)
+        self.redis_cache_service = redis_cache_service
+        self.embedding_cache = EmbeddingCache(embedding_cache_size, redis_cache_service)
+        self.query_cache = QueryResultCache(query_cache_size, redis_cache_service)
+        self.timeout_manager = AdaptiveTimeoutManager(base_timeout, redis_cache_service=redis_cache_service)
         
         # Performance tracking
         self.total_queries = 0
@@ -292,20 +266,24 @@ class PerformanceOptimizer:
         embedding_hit_rate = (self.cache_hits['embedding'] / total_embedding_requests * 100) if total_embedding_requests > 0 else 0
         query_hit_rate = (self.cache_hits['query'] / total_query_requests * 100) if total_query_requests > 0 else 0
         
+        # Get Redis cache statistics
+        redis_stats = {}
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            redis_stats = self.redis_cache_service.get_cache_stats()
+        
         return {
             'total_queries': self.total_queries,
             'embedding_cache': {
-                'size': len(self.embedding_cache.cache),
                 'hits': self.cache_hits['embedding'],
                 'misses': self.cache_misses['embedding'],
                 'hit_rate': f"{embedding_hit_rate:.1f}%"
             },
             'query_cache': {
-                'size': len(self.query_cache.cache),
                 'hits': self.cache_hits['query'],
                 'misses': self.cache_misses['query'],
                 'hit_rate': f"{query_hit_rate:.1f}%"
             },
+            'redis_cache': redis_stats,
             'source_performance': self.timeout_manager.get_performance_summary()
         }
     
@@ -313,10 +291,19 @@ class PerformanceOptimizer:
         """Clear all caches."""
         self.embedding_cache.clear()
         self.query_cache.clear()
+        if self.redis_cache_service and self.redis_cache_service.is_available():
+            self.redis_cache_service.clear_cache()
         self.cache_hits = {'embedding': 0, 'query': 0}
         self.cache_misses = {'embedding': 0, 'query': 0}
     
     def save_caches(self):
-        """Save all caches to disk."""
-        self.embedding_cache._save_cache()
-        self.query_cache._save_cache()
+        """Save all caches to Redis."""
+        # Redis automatically persists data, but we can save performance metrics
+        self.timeout_manager._save_metrics_to_redis()
+    
+    def clear_cache(self):
+        """Clear in-memory caches only."""
+        self.embedding_cache.memory_cache.clear()
+        self.query_cache.memory_cache.clear()
+        self.cache_hits = {'embedding': 0, 'query': 0}
+        self.cache_misses = {'embedding': 0, 'query': 0}
