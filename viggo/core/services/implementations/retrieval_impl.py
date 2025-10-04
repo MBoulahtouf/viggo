@@ -10,9 +10,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from viggo.core.services.interfaces.retrieval import (
     Retriever, HybridRetriever, ResultRanker, RetrievalResult, RetrievalSource, QueryContext
 )
-from viggo.core.services.hybrid_retriever import HybridRetriever as LegacyHybridRetriever
-from viggo.core.services.hybrid_search_service import HybridSearchService
-from viggo.core.services.graph_service import GraphService
+from .hybrid_retriever_impl import HybridRetriever
+from .hybrid_search_service_impl import HybridSearchService
+from .graph_service_impl import GraphService
 
 
 class SemanticRetriever(Retriever):

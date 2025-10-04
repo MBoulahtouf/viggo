@@ -18,8 +18,8 @@ from .generation_impl import ConcreteGenerationService, LLMTextGenerator, Templa
 from .storage_impl import FAISSVectorStorage, Neo4jGraphStorage, RedisCacheStorage
 from .rag_service_impl import ConcreteRAGService
 
-from viggo.core.services.graph_service import GraphService
-from viggo.core.services.redis_service import RedisService
+from .graph_service_impl import GraphService
+from .redis_service_impl import RedisService
 
 
 class ConcreteRAGOrchestrator(RAGOrchestrator):

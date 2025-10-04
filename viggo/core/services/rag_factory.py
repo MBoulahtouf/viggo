@@ -5,8 +5,8 @@ RAG Factory Service - Provides easy access to the new SOLID-compliant RAG archit
 from typing import Optional, Dict, Any
 from viggo.core.services.interfaces.rag import RAGService, RAGConfig
 from viggo.core.services.implementations.rag_orchestrator import ConcreteRAGOrchestrator
-from viggo.core.services.graph_service import GraphService
-from viggo.core.services.redis_service import RedisService
+from viggo.core.services.implementations.graph_service_impl import GraphService
+from viggo.core.services.implementations.redis_service_impl import RedisService
 
 
 class RAGFactory:

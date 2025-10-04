@@ -11,8 +11,8 @@ from viggo.core.services.interfaces.storage import (
     StorageBackend, VectorStorage, GraphStorage, CacheStorage, 
     StorageMetadata, StorageType
 )
-from viggo.core.services.redis_service import RedisService
-from viggo.core.services.graph_service import GraphService
+from .redis_service_impl import RedisService
+from .graph_service_impl import GraphService
 from faiss import IndexFlatL2, write_index, read_index
 
 T = TypeVar('T')

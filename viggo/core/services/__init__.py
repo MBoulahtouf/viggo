@@ -57,17 +57,10 @@ from .implementations import (
     GraphService, HybridRetriever, HybridSearchService, PerformanceOptimizer, RedisService, AliasingService
 )
 
-# Legacy imports for backward compatibility (will be removed after migration)
-from .rag_service import RAGService as LegacyRAGService
-from .enhanced_rag_service import EnhancedRAGService
+# Utility services (concrete implementations - no interfaces needed)
 from .content_filter_service import ContentFilterService
-from .context_aware_retriever import ContextAwareRetriever
-from .entity_chunk_linker import EntityChunkLinker
 from .enhanced_entity_extractor import EnhancedEntityExtractor
 from .hybrid_chunking_service import HybridChunkingService
-from .user_aware_rag_service import UserAwareRAGService
-from .user_progress_service import UserProgressService
-from .enhanced_rag_integration import EnhancedRAGIntegration
 
 __all__ = [
     # New SOLID architecture
@@ -95,15 +88,8 @@ __all__ = [
     'ConcreteRAGService', 'ConcreteRAGOrchestrator',
     'GraphService', 'HybridRetriever', 'HybridSearchService', 'PerformanceOptimizer', 'RedisService', 'AliasingService',
     
-    # Legacy services (for backward compatibility - will be removed)
-    'LegacyRAGService',
-    'EnhancedRAGService',
+    # Utility services
     'ContentFilterService',
-    'ContextAwareRetriever',
-    'EntityChunkLinker',
     'EnhancedEntityExtractor',
-    'HybridChunkingService',
-    'UserAwareRAGService',
-    'UserProgressService',
-    'EnhancedRAGIntegration'
+    'HybridChunkingService'
 ]
