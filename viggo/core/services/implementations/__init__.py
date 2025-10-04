@@ -29,6 +29,14 @@ from .storage_impl import (
 from .rag_service_impl import ConcreteRAGService
 from .rag_orchestrator import ConcreteRAGOrchestrator
 
+# Core service implementations
+from .graph_service_impl import GraphService
+from .hybrid_retriever_impl import HybridRetriever
+from .hybrid_search_service_impl import HybridSearchService
+from .performance_optimizer_impl import PerformanceOptimizer
+from .redis_service_impl import RedisService
+from .aliasing_service_impl import AliasingService
+
 __all__ = [
     # Document processors
     'PDFDocumentProcessor', 'EPUBDocumentProcessor', 'ConcreteDocumentProcessorFactory',
@@ -46,5 +54,8 @@ __all__ = [
     'FileStorageBackend', 'FAISSVectorStorage', 'Neo4jGraphStorage', 'RedisCacheStorage',
     
     # RAG
-    'ConcreteRAGService', 'ConcreteRAGOrchestrator'
+    'ConcreteRAGService', 'ConcreteRAGOrchestrator',
+    
+    # Core service implementations
+    'GraphService', 'HybridRetriever', 'HybridSearchService', 'PerformanceOptimizer', 'RedisService', 'AliasingService'
 ]

@@ -30,6 +30,31 @@ from .rag import (
     RAGService, RAGConfig, RAGResult, IndexingResult, RAGMode, RAGOrchestrator
 )
 
+# Core service interfaces
+from .graph_service import (
+    IGraphService, PaginationParams, NodeResult, RelationshipResult, EntityGraphResult, GraphServiceError
+)
+
+from .hybrid_retriever import (
+    IHybridRetriever
+)
+
+from .hybrid_search_service import (
+    IHybridSearchService
+)
+
+from .performance_optimizer import (
+    IPerformanceOptimizer
+)
+
+from .redis_service import (
+    IRedisService
+)
+
+from .aliasing_service import (
+    IAliasingService, AliasMapping, CanonicalGroup
+)
+
 __all__ = [
     # Document processing
     'DocumentProcessor', 'DocumentProcessorFactory', 'DocumentMetadata', 'DocumentPage',
@@ -47,5 +72,13 @@ __all__ = [
     'StorageBackend', 'VectorStorage', 'GraphStorage', 'CacheStorage', 'StorageMetadata', 'StorageType',
     
     # RAG
-    'RAGService', 'RAGConfig', 'RAGResult', 'IndexingResult', 'RAGMode', 'RAGOrchestrator'
+    'RAGService', 'RAGConfig', 'RAGResult', 'IndexingResult', 'RAGMode', 'RAGOrchestrator',
+    
+    # Core service interfaces
+    'IGraphService', 'PaginationParams', 'NodeResult', 'RelationshipResult', 'EntityGraphResult', 'GraphServiceError',
+    'IHybridRetriever',
+    'IHybridSearchService',
+    'IPerformanceOptimizer',
+    'IRedisService',
+    'IAliasingService', 'AliasMapping', 'CanonicalGroup'
 ]

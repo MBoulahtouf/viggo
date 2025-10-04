@@ -26,7 +26,11 @@ from .interfaces import (
     StorageBackend, VectorStorage, GraphStorage, CacheStorage, StorageMetadata, StorageType,
     
     # RAG
-    RAGService, RAGConfig, RAGResult, IndexingResult, RAGMode, RAGOrchestrator
+    RAGService, RAGConfig, RAGResult, IndexingResult, RAGMode, RAGOrchestrator,
+    
+    # Core service interfaces
+    IGraphService, PaginationParams, NodeResult, RelationshipResult, EntityGraphResult, GraphServiceError,
+    IHybridRetriever, IHybridSearchService, IPerformanceOptimizer, IRedisService, IAliasingService, AliasMapping, CanonicalGroup
 )
 
 # Import concrete implementations
@@ -47,18 +51,15 @@ from .implementations import (
     FileStorageBackend, FAISSVectorStorage, Neo4jGraphStorage, RedisCacheStorage,
     
     # RAG
-    ConcreteRAGService, ConcreteRAGOrchestrator
+    ConcreteRAGService, ConcreteRAGOrchestrator,
+    
+    # Core service implementations
+    GraphService, HybridRetriever, HybridSearchService, PerformanceOptimizer, RedisService, AliasingService
 )
 
-# Legacy imports for backward compatibility
+# Legacy imports for backward compatibility (will be removed after migration)
 from .rag_service import RAGService as LegacyRAGService
 from .enhanced_rag_service import EnhancedRAGService
-from .hybrid_retriever import HybridRetriever as LegacyHybridRetriever
-from .graph_service import GraphService
-from .redis_service import RedisService
-from .hybrid_search_service import HybridSearchService
-from .performance_optimizer import PerformanceOptimizer
-from .aliasing_service import AliasingService
 from .content_filter_service import ContentFilterService
 from .context_aware_retriever import ContextAwareRetriever
 from .entity_chunk_linker import EntityChunkLinker
@@ -82,6 +83,8 @@ __all__ = [
     'TextGenerator', 'PromptTemplate', 'GenerationService', 'GenerationResult', 'GenerationContext', 'GenerationModel',
     'StorageBackend', 'VectorStorage', 'GraphStorage', 'CacheStorage', 'StorageMetadata', 'StorageType',
     'RAGService', 'RAGConfig', 'RAGResult', 'IndexingResult', 'RAGMode', 'RAGOrchestrator',
+    'IGraphService', 'PaginationParams', 'NodeResult', 'RelationshipResult', 'EntityGraphResult', 'GraphServiceError',
+    'IHybridRetriever', 'IHybridSearchService', 'IPerformanceOptimizer', 'IRedisService', 'IAliasingService', 'AliasMapping', 'CanonicalGroup',
     
     # Concrete implementations
     'PDFDocumentProcessor', 'EPUBDocumentProcessor', 'ConcreteDocumentProcessorFactory',
@@ -90,16 +93,11 @@ __all__ = [
     'LLMTextGenerator', 'TemplateTextGenerator', 'RAGPromptTemplate', 'ConcreteGenerationService',
     'FileStorageBackend', 'FAISSVectorStorage', 'Neo4jGraphStorage', 'RedisCacheStorage',
     'ConcreteRAGService', 'ConcreteRAGOrchestrator',
+    'GraphService', 'HybridRetriever', 'HybridSearchService', 'PerformanceOptimizer', 'RedisService', 'AliasingService',
     
-    # Legacy services (for backward compatibility)
+    # Legacy services (for backward compatibility - will be removed)
     'LegacyRAGService',
     'EnhancedRAGService',
-    'LegacyHybridRetriever',
-    'GraphService',
-    'RedisService',
-    'HybridSearchService',
-    'PerformanceOptimizer',
-    'AliasingService',
     'ContentFilterService',
     'ContextAwareRetriever',
     'EntityChunkLinker',
