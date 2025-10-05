@@ -35,6 +35,11 @@ from .api_models import (
     HealthCheckResponse, VersionResponse
 )
 
+# User progress models
+from .user_progress import (
+    ReadingStatus, UserProgress, DocumentMetadata
+)
+
 __all__ = [
     # Core RAG models
     'QueryRequest', 'QueryResponse', 'QueryContext',
@@ -56,5 +61,8 @@ __all__ = [
     # API response models
     'BaseResponse', 'ErrorResponse', 'SuccessResponse',
     'PaginationParams', 'PaginatedResponse',
-    'HealthCheckResponse', 'VersionResponse'
+    'HealthCheckResponse', 'VersionResponse',
+    
+    # User progress models
+    'ReadingStatus', 'UserProgress', 'DocumentMetadata'
 ]

@@ -8,14 +8,29 @@ from datetime import datetime
 from enum import Enum
 
 
+class HybridSearchConfig(BaseModel):
+    """Configuration for hybrid search."""
+    semantic_weight: float = Field(0.4, ge=0.0, le=1.0, description="Weight for semantic search")
+    keyword_weight: float = Field(0.3, ge=0.0, le=1.0, description="Weight for keyword search")
+    graph_weight: float = Field(0.3, ge=0.0, le=1.0, description="Weight for graph search")
+    enable_entity_extraction: bool = Field(True, description="Enable entity extraction from query")
+    enable_relationship_traversal: bool = Field(True, description="Enable graph relationship traversal")
+    max_relationship_depth: int = Field(2, ge=1, le=5, description="Maximum relationship traversal depth")
+
+
 class QueryContext(BaseModel):
-    """Context for RAG queries."""
+    """Enhanced context for hybrid RAG queries."""
     query: str = Field(..., description="The query text")
     page_filter: Optional[int] = Field(None, description="Filter by specific page number")
     top_k: int = Field(5, ge=1, le=50, description="Number of results to return")
     similarity_threshold: float = Field(0.7, ge=0.0, le=1.0, description="Minimum similarity score")
     include_metadata: bool = Field(True, description="Include metadata in results")
-    search_method: str = Field("hybrid", description="Search method: semantic, keyword, hybrid")
+    search_method: str = Field("hybrid", description="Search method: semantic, keyword, graph, hybrid")
+    hybrid_config: Optional[HybridSearchConfig] = Field(None, description="Hybrid search configuration")
+    extracted_entities: List[str] = Field(default_factory=list, description="Entities extracted from query")
+    user_context: Dict[str, Any] = Field(default_factory=dict, description="User-specific context")
+    spoiler_protection: bool = Field(False, description="Enable spoiler protection")
+    max_page: Optional[int] = Field(None, description="Maximum page for spoiler protection")
 
 
 class QueryRequest(BaseModel):
@@ -31,22 +46,54 @@ class QueryRequest(BaseModel):
         return v.strip()
 
 
+class RetrievalSource(str, Enum):
+    """Retrieval source types for hybrid RAG."""
+    SEMANTIC = "semantic"
+    KEYWORD = "keyword"
+    GRAPH = "graph"
+    HYBRID = "hybrid"
+    FALLBACK = "fallback"
+
+
 class SourcePage(BaseModel):
-    """Source page information."""
+    """Source page information with hybrid retrieval tracking."""
     page_number: int = Field(..., description="Page number")
     content: str = Field(..., description="Page content")
     relevance_score: float = Field(..., ge=0.0, le=1.0, description="Relevance score")
     chunk_id: Optional[str] = Field(None, description="Chunk identifier")
+    retrieval_source: RetrievalSource = Field(..., description="Which retrieval method found this source")
+    semantic_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Semantic similarity score")
+    keyword_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Keyword matching score")
+    graph_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Graph relationship score")
+    entity_matches: List[str] = Field(default_factory=list, description="Entities found in this source")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional source metadata")
+
+
+class HybridSearchMetrics(BaseModel):
+    """Metrics for hybrid search performance."""
+    semantic_results: int = Field(0, ge=0, description="Number of semantic search results")
+    keyword_results: int = Field(0, ge=0, description="Number of keyword search results")
+    graph_results: int = Field(0, ge=0, description="Number of graph search results")
+    total_candidates: int = Field(0, ge=0, description="Total candidate results before ranking")
+    final_results: int = Field(0, ge=0, description="Final results after ranking")
+    semantic_time: float = Field(0.0, description="Semantic search time in seconds")
+    keyword_time: float = Field(0.0, description="Keyword search time in seconds")
+    graph_time: float = Field(0.0, description="Graph search time in seconds")
+    ranking_time: float = Field(0.0, description="Result ranking time in seconds")
 
 
 class QueryResponse(BaseModel):
-    """Response model for RAG queries."""
+    """Enhanced response model for hybrid RAG queries."""
     question: str = Field(..., description="The original question")
     answer: str = Field(..., description="Generated answer")
     source_pages: List[SourcePage] = Field(..., description="Source pages used for the answer")
     search_method: str = Field(..., description="Search method used")
-    processing_time: float = Field(..., description="Processing time in seconds")
+    processing_time: float = Field(..., description="Total processing time in seconds")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence in the answer")
+    hybrid_metrics: Optional[HybridSearchMetrics] = Field(None, description="Hybrid search performance metrics")
+    extracted_entities: List[str] = Field(default_factory=list, description="Entities extracted from query")
+    related_entities: List[str] = Field(default_factory=list, description="Related entities found")
+    spoiler_protection_applied: bool = Field(False, description="Whether spoiler protection was applied")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
@@ -132,9 +179,43 @@ class RAGStatus(BaseModel):
     system_health: str = Field(..., description="Overall system health")
 
 
+class EntityInfo(BaseModel):
+    """Entity information for hybrid RAG."""
+    name: str = Field(..., description="Entity name")
+    entity_type: str = Field(..., description="Type of entity (person, place, concept, etc.)")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Entity extraction confidence")
+    aliases: List[str] = Field(default_factory=list, description="Alternative names for the entity")
+    canonical_name: Optional[str] = Field(None, description="Canonical name for the entity")
+    page_references: List[int] = Field(default_factory=list, description="Pages where entity appears")
+    relationships: List[str] = Field(default_factory=list, description="Related entities")
+
+
+class RelationshipInfo(BaseModel):
+    """Relationship information for hybrid RAG."""
+    source_entity: str = Field(..., description="Source entity name")
+    target_entity: str = Field(..., description="Target entity name")
+    relationship_type: str = Field(..., description="Type of relationship")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Relationship confidence")
+    page_references: List[int] = Field(default_factory=list, description="Pages where relationship appears")
+    context: str = Field(..., description="Context of the relationship")
+
+
+class HybridRAGStatus(BaseModel):
+    """Enhanced status for hybrid RAG system."""
+    is_ready: bool = Field(..., description="Whether the system is ready")
+    documents_indexed: int = Field(0, ge=0, description="Number of documents indexed")
+    total_chunks: int = Field(0, ge=0, description="Total number of chunks")
+    total_entities: int = Field(0, ge=0, description="Total number of entities")
+    total_relationships: int = Field(0, ge=0, description="Total number of relationships")
+    last_indexed: Optional[datetime] = Field(None, description="Last indexing timestamp")
+    system_health: str = Field(..., description="Overall system health")
+    hybrid_components: Dict[str, Dict[str, Any]] = Field(..., description="Status of hybrid components")
+    retrieval_performance: Dict[str, float] = Field(default_factory=dict, description="Retrieval performance metrics")
+
+
 class SystemStatus(BaseModel):
     """Overall system status."""
-    rag_status: RAGStatus = Field(..., description="RAG system status")
+    rag_status: HybridRAGStatus = Field(..., description="Hybrid RAG system status")
     vector_storage: Dict[str, Any] = Field(..., description="Vector storage status")
     graph_storage: Dict[str, Any] = Field(..., description="Graph storage status")
     cache_storage: Dict[str, Any] = Field(..., description="Cache storage status")

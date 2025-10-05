@@ -10,7 +10,12 @@ from .rag_models import (
     QueryRequest as NewQueryRequest,
     QueryResponse as NewQueryResponse,
     DocumentUploadResponse as NewDocumentUploadResponse,
-    DocumentInfo as DocumentInfoResponse
+    DocumentInfo as DocumentInfoResponse,
+    RetrievalSource,
+    HybridSearchConfig,
+    HybridSearchMetrics,
+    EntityInfo,
+    RelationshipInfo
 )
 from .graph_models import (
     NodeModel as NewNodeModel,
@@ -30,6 +35,21 @@ NodeListResponse = NewNodeListResponse
 GroupedNodeModel = GroupedNodeModel
 GroupedNodeListResponse = NewGroupedNodeListResponse
 EntityGraphResponse = NewEntityGraphResponse
+
+# Export new hybrid RAG models
+__all__ = [
+    # Legacy models
+    'QueryRequest', 'QueryResponse', 'DocumentUploadResponse', 'DocumentInfoResponse',
+    'NodeModel', 'NodeListResponse', 'GroupedNodeModel', 'GroupedNodeListResponse', 'EntityGraphResponse',
+    
+    # New hybrid RAG models
+    'RetrievalSource', 'HybridSearchConfig', 'HybridSearchMetrics', 'EntityInfo', 'RelationshipInfo',
+    
+    # Legacy compatibility models
+    'LegacyQueryRequest', 'LegacyQueryResponse', 'LegacyDocumentInfoResponse', 
+    'LegacyDocumentUploadResponse', 'LegacyNodeModel', 'LegacyNodeListResponse',
+    'LegacyGroupedNodeModel', 'LegacyGroupedNodeListResponse', 'LegacyEntityGraphResponse'
+]
 
 # Legacy models that are no longer used but kept for compatibility
 class LegacyQueryRequest(BaseModel):
