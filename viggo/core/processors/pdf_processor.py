@@ -30,15 +30,25 @@ class PDFProcessor(DocumentProcessor):
         try:
             reader = PdfReader(file_path)
             pages_data = []
+            total_pages = len(reader.pages)
+            
+            print(f"[DEBUG] PDF has {total_pages} total pages")
             
             for i, page in enumerate(reader.pages):
                 text = page.extract_text()
+                word_count = len(text.split()) if text else 0
+                print(f"[DEBUG] Page {i+1}: {word_count} words, content length: {len(text) if text else 0}")
+                
                 if text and text.strip():  # Only include pages with actual content
                     pages_data.append({
                         "page": i + 1,
                         "content": text.strip()
                     })
                     print(f"[DEBUG] Extracted text from PDF page {i+1}: {text[:200]}...")
+                else:
+                    print(f"[DEBUG] Skipping page {i+1} - no readable content")
+            
+            print(f"[DEBUG] Extracted {len(pages_data)} pages with content from {total_pages} total pages")
             
             if not pages_data:
                 raise ValueError("No readable text content found in PDF")
@@ -64,10 +74,13 @@ class PDFProcessor(DocumentProcessor):
         try:
             reader = PdfReader(file_path)
             metadata = reader.metadata
+            total_pages = len(reader.pages)
             
-            return {
+            print(f"[DEBUG] get_pdf_info: PDF has {total_pages} total pages")
+            
+            result = {
                 **self.get_file_info(file_path),
-                "num_pages": len(reader.pages),
+                "num_pages": total_pages,
                 "title": metadata.get("/Title", "") if metadata else "",
                 "author": metadata.get("/Author", "") if metadata else "",
                 "subject": metadata.get("/Subject", "") if metadata else "",
@@ -76,6 +89,9 @@ class PDFProcessor(DocumentProcessor):
                 "creation_date": str(metadata.get("/CreationDate", "")) if metadata else "",
                 "modification_date": str(metadata.get("/ModDate", "")) if metadata else ""
             }
+            
+            print(f"[DEBUG] get_pdf_info returning: {result}")
+            return result
         except Exception as e:
             # Return basic file info if PDF metadata cannot be read
             return self.get_file_info(file_path)

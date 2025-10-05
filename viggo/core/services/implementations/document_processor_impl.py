@@ -44,6 +44,18 @@ class PDFDocumentProcessor(DocumentProcessor):
         
         return document_pages
     
+    def get_pdf_info(self, file_path: str) -> Dict[str, Any]:
+        """Get PDF-specific information."""
+        # Use existing PDF processor implementation
+        legacy_factory = LegacyFactory()
+        processor = legacy_factory.get_processor(file_path)
+        
+        if not processor:
+            raise ValueError(f"Cannot process PDF file: {file_path}")
+        
+        # Get PDF info from existing implementation
+        return processor.get_pdf_info(file_path)
+    
     def get_document_metadata(self, file_path: str) -> DocumentMetadata:
         """Get metadata for a PDF document."""
         import time
@@ -154,3 +166,21 @@ class ConcreteDocumentProcessorFactory(DocumentProcessorFactory):
     def is_supported(self, file_path: str) -> bool:
         """Check if file format is supported."""
         return self.get_processor(file_path) is not None
+    
+    def get_file_info(self, file_path: str) -> Dict[str, Any]:
+        """Get file information using the appropriate processor."""
+        processor = self.get_processor(file_path)
+        if not processor:
+            raise ValueError(f"Unsupported file format: {file_path}")
+        
+        # Get metadata from the processor
+        metadata = processor.get_document_metadata(file_path)
+        
+        return {
+            'filename': metadata.filename,
+            'file_type': metadata.file_type,
+            'page_count': metadata.page_count,
+            'word_count': metadata.word_count,
+            'processing_timestamp': metadata.processing_timestamp,
+            'additional_metadata': metadata.additional_metadata
+        }

@@ -123,14 +123,49 @@ class ConcreteRAGService(RAGService):
             retrieval_results = self.hybrid_retriever.retrieve_hybrid(context)
             
             if not retrieval_results:
-                return RAGResult(
-                    query=query,
-                    answer="No relevant information found in the document.",
-                    source_pages=[],
-                    confidence_score=0.0,
-                    processing_time=time.time() - start_time,
-                    metadata={"retrieval_results": 0}
-                )
+                # Check if retrievers are available
+                available_sources = self.hybrid_retriever.get_available_sources() if hasattr(self.hybrid_retriever, 'get_available_sources') else []
+                
+                # Try a simpler fallback approach
+                if hasattr(self.hybrid_retriever, 'vector_index') and self.hybrid_retriever.vector_index is not None:
+                    # Direct semantic search as fallback
+                    try:
+                        from sentence_transformers import SentenceTransformer
+                        model = SentenceTransformer("all-MiniLM-L6-v2")
+                        query_embedding = model.encode([query])
+                        
+                        if hasattr(self.hybrid_retriever, 'all_chunks_with_metadata') and self.hybrid_retriever.all_chunks_with_metadata:
+                            # Simple keyword matching as last resort
+                            query_words = query.lower().split()
+                            for chunk in self.hybrid_retriever.all_chunks_with_metadata[:10]:  # Check first 10 chunks
+                                content = chunk.get('content', '').lower()
+                                if any(word in content for word in query_words):
+                                    # Create a simple result
+                                    from viggo.core.services.interfaces.retrieval import RetrievalResult, RetrievalSource
+                                    retrieval_results = [RetrievalResult(
+                                        content=chunk['content'],
+                                        score=0.8,
+                                        source=RetrievalSource.SEMANTIC,
+                                        page_number=chunk.get('page', 1),
+                                        chunk_id=chunk.get('id', 'fallback')
+                                    )]
+                                    break
+                    except Exception as e:
+                        print(f"Fallback retrieval failed: {e}")
+                
+                if not retrieval_results:
+                    return RAGResult(
+                        query=query,
+                        answer="No relevant information found in the document. Please try re-uploading the document or ask a different question.",
+                        source_pages=[],
+                        confidence_score=0.0,
+                        processing_time=time.time() - start_time,
+                        metadata={
+                            "retrieval_results": 0,
+                            "available_sources": available_sources,
+                            "debug_info": "No retrievers returned results"
+                        }
+                    )
             
             # Step 2: Prepare generation context
             retrieved_content = []

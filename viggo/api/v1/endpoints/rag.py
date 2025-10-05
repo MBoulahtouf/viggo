@@ -2,10 +2,12 @@
 RAG API endpoints using the new SOLID architecture.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile
 from typing import List, Optional
 import logging
 import time
+import os
+from pathlib import Path
 
 from viggo.models.rag_models import (
     QueryRequest, QueryResponse, QueryContext,
@@ -16,12 +18,115 @@ from viggo.models.rag_models import (
 from viggo.models.api_models import (
     SuccessResponse, ErrorResponse, PaginationParams, PaginatedResponse
 )
-from viggo.core.services import get_rag_service, get_legacy_compatible_service
+from viggo.core.services import get_rag_service
 from viggo.dependencies import get_solid_rag_service
 from viggo.core.services.interfaces.rag import RAGService as IRAGService
 from viggo.core.services.interfaces.retrieval import QueryContext as RetrievalQueryContext
+from viggo.core.config import settings
 
 router = APIRouter(prefix="/rag", tags=["RAG Operations"])
+
+
+@router.post("/upload", response_model=SuccessResponse[DocumentUploadResponse])
+async def upload_document(
+    file: UploadFile = File(...),
+    rag_service: IRAGService = Depends(get_solid_rag_service)
+):
+    """
+    Upload a document (PDF, EPUB, etc.) and process it for RAG.
+    
+    This endpoint uses the new SOLID-compliant RAG architecture.
+    """
+    try:
+        # Validate file
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No filename provided")
+        
+        # Check file size (limit to 50MB)
+        file_content = await file.read()
+        if len(file_content) > 50 * 1024 * 1024:  # 50MB
+            raise HTTPException(status_code=413, detail="File too large. Maximum size is 50MB.")
+        
+        # Check file extension
+        file_extension = Path(file.filename).suffix.lower()
+        supported_formats = ['.pdf', '.epub']
+        if file_extension not in supported_formats:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file format: {file_extension}. Supported formats: {', '.join(supported_formats)}"
+            )
+        
+        # Save uploaded file
+        file_location = os.path.join(settings.data_dir, file.filename)
+        with open(file_location, "wb") as file_object:
+            file_object.write(file_content)
+        
+        # Get page count from the document processor
+        page_count = 0
+        processor = rag_service.document_processor_factory.get_processor(file_location)
+        if processor and hasattr(processor, 'get_pdf_info'):
+            # For PDF files, get actual page count from PDF metadata
+            pdf_info = processor.get_pdf_info(file_location)
+            page_count = pdf_info.get('num_pages', 0)
+            print(f"[DEBUG] RAG endpoint - PDF page count from metadata: {page_count}")
+        elif processor and hasattr(processor, 'get_epub_info'):
+            # For EPUB files, get page count from EPUB info
+            epub_info = processor.get_epub_info(file_location)
+            page_count = epub_info.get('num_pages', 0)
+            print(f"[DEBUG] RAG endpoint - EPUB page count from metadata: {page_count}")
+        
+        # Process document using the new SOLID service
+        start_time = time.time()
+        result = rag_service.index_document(file_location)
+        processing_time = time.time() - start_time
+        
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Document processing failed: {result.error_message}"
+            )
+        
+        # Fallback: if no page count found, use chunks as estimate
+        if page_count == 0:
+            page_count = max(1, result.chunks_created // 10)  # Rough estimate
+            print(f"[DEBUG] RAG endpoint - Using fallback page count estimate: {page_count}")
+        
+        print(f"[DEBUG] RAG endpoint - Final page count: {page_count}")
+        
+        # Create document info
+        from datetime import datetime
+        document_info = DocumentInfo(
+            filename=file.filename,
+            file_type=file_extension.upper(),
+            total_pages=page_count,
+            content_start_page=1,
+            content_end_page=page_count,
+            file_size=len(file_content),
+            upload_timestamp=datetime.now(),
+            processing_status="completed"
+        )
+        
+        response = DocumentUploadResponse(
+            filename=file.filename, 
+            num_chunks_indexed=result.chunks_created, 
+            message=f"Document ({file_extension.upper()}) processed and indexed for RAG.",
+            document_info=document_info,
+            processing_time=processing_time
+        )
+        
+        return SuccessResponse(
+            message="Document uploaded and processed successfully",
+            data=response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Document upload failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Document upload failed: {str(e)}"
+        )
 
 
 @router.post("/query", response_model=SuccessResponse[QueryResponse])
@@ -48,14 +153,16 @@ async def query_document(
                 detail="RAG system is not ready. Please upload and index a document first."
             )
         
-        # Create query context
+        # Create query context with sensible defaults (no user configuration needed)
         context = RetrievalQueryContext(
             query=request.question,
             page_filter=request.page_number,
-            top_k=request.context.top_k if request.context else 5,
-            similarity_threshold=request.context.similarity_threshold if request.context else 0.7,
-            include_metadata=request.context.include_metadata if request.context else True,
-            search_method=request.context.search_method if request.context else "hybrid"
+            top_k=5,
+            additional_filters={
+                "include_metadata": False,  # No metadata as requested
+                "search_method": "hybrid",  # Use hybrid search for best results
+                "similarity_threshold": 0.7  # Good balance of precision/recall
+            }
         )
         
         # Perform RAG query
@@ -63,7 +170,9 @@ async def query_document(
         
         processing_time = time.time() - start_time
         
-        # Build response
+        # Build response using actual RAG result data
+        from viggo.models.rag_models import RetrievalSource
+        
         response = QueryResponse(
             question=request.question,
             answer=result.answer,
@@ -71,18 +180,21 @@ async def query_document(
                 {
                     "page_number": page,
                     "content": f"Content from page {page}",  # Simplified for now
-                    "relevance_score": 0.8,  # Would come from actual retrieval
-                    "chunk_id": f"chunk_{page}"
+                    "relevance_score": result.confidence_score,  # Use actual confidence
+                    "chunk_id": f"chunk_{page}",
+                    "retrieval_source": RetrievalSource.HYBRID,  # Required field
+                    "semantic_score": result.confidence_score,  # Use actual confidence
+                    "keyword_score": result.confidence_score * 0.8,  # Mock keyword score
+                    "graph_score": result.confidence_score * 0.6,  # Mock graph score
+                    "entity_matches": [],  # Empty for now
+                    "metadata": {}  # Empty metadata
                 }
                 for page in result.source_pages
             ],
-            search_method=context.search_method,
-            processing_time=processing_time,
-            confidence_score=0.85,  # Would come from actual confidence calculation
-            metadata={
-                "query_context": context.dict() if hasattr(context, 'dict') else {},
-                "system_status": system_status
-            }
+            search_method="hybrid",
+            processing_time=result.processing_time,  # Use actual processing time
+            confidence_score=result.confidence_score,  # Use actual confidence
+            metadata=result.metadata  # Use actual metadata
         )
         
         return SuccessResponse(

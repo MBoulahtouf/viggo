@@ -10,7 +10,7 @@ from datetime import datetime
 from viggo.models.api_models import (
     HealthCheckResponse, VersionResponse, SuccessResponse
 )
-from viggo.core.services import get_rag_service
+from viggo.core.services.rag_factory import get_rag_service
 from viggo.dependencies import get_solid_rag_service
 from viggo.core.services.interfaces.rag import RAGService as IRAGService
 

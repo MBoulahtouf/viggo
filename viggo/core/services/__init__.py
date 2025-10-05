@@ -1,11 +1,9 @@
 # Services package for Viggo
 
-# Import the new SOLID-compliant architecture
+# Import the SOLID-compliant architecture
 from .rag_factory import (
     RAGFactory, 
-    get_rag_service, 
-    get_legacy_compatible_service,
-    LegacyCompatibleRAGService
+    get_rag_service
 )
 
 # Import interfaces for type hints and extension
@@ -69,11 +67,9 @@ from .implementations import (
 )
 
 __all__ = [
-    # New SOLID architecture
+    # SOLID architecture
     'RAGFactory',
     'get_rag_service',
-    'get_legacy_compatible_service',
-    'LegacyCompatibleRAGService',
     
     # Interfaces
     'DocumentProcessor', 'DocumentProcessorFactory', 'DocumentMetadata', 'DocumentPage',

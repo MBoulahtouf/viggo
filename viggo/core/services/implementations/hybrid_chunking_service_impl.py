@@ -117,17 +117,28 @@ class HybridChunkingService(IHybridChunkingService):
         """
         chapter_chunks = []
         
+        print(f"[DEBUG] Processing {len(document_store)} pages for chunking")
+        
         for doc_page in document_store:
-            # Skip metadata pages
+            # Skip metadata pages (but be more lenient for short documents)
             if self.config.enable_content_filtering and doc_page.get("page", 0) <= self.config.skip_metadata_pages:
-                continue
+                # For short documents (less than 10 pages), only skip the first page
+                if len(document_store) <= 10 and doc_page.get("page", 0) == 1:
+                    continue
+                elif len(document_store) > 10:
+                    continue
             
             content = doc_page.get("content", "")
-            if not content or len(content.strip()) < self.config.min_chapter_words:
+            page_num = doc_page.get("page", 0)
+            word_count = len(content.split()) if content else 0
+            
+            print(f"[DEBUG] Page {page_num}: {word_count} words, content length: {len(content) if content else 0}")
+            
+            if not content or len(content.strip()) < 10:  # Reduced from min_chapter_words to 10 words
+                print(f"[DEBUG] Skipping page {page_num} - insufficient content")
                 continue
             
             # Determine if this should be a full chapter or split
-            word_count = len(content.split())
             
             if word_count <= self.config.max_chapter_words:
                 # Keep as single chapter

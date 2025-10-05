@@ -299,8 +299,13 @@ class ConcreteHybridRetriever(HybridRetriever):
         """Perform hybrid retrieval across multiple sources."""
         all_results = []
         
+        # Check if we have any retrievers
+        if not self.retrievers:
+            print("Warning: No retrievers available for hybrid retrieval")
+            return []
+        
         # Run all retrievers in parallel
-        with ThreadPoolExecutor(max_workers=len(self.retrievers)) as executor:
+        with ThreadPoolExecutor(max_workers=max(1, len(self.retrievers))) as executor:
             futures = {}
             for source_type, retriever in self.retrievers.items():
                 if retriever.is_available():
