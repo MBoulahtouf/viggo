@@ -22,10 +22,11 @@ class SessionManager:
         
         if self.keys["user_progress"] not in st.session_state:
             st.session_state[self.keys["user_progress"]] = {
-                "current_page": 1,
+                "current_page": 0,  # Start at 0 (not started)
                 "is_finished": False,
                 "last_updated": datetime.now().isoformat(),
-                "total_pages": 0
+                "total_pages": 0,
+                "spoiler_protection": True  # Enable spoiler protection by default
             }
         
         if self.keys["document_info"] not in st.session_state:
@@ -102,7 +103,8 @@ class SessionManager:
     
     def is_spoiler_protection_enabled(self) -> bool:
         """Check if spoiler protection is enabled."""
-        return st.session_state.get(self.keys["spoiler_protection"], True)
+        progress = self.get_user_progress()
+        return progress.get("spoiler_protection", True)
     
     def is_finished(self) -> bool:
         """Check if the user has finished the book."""
@@ -140,6 +142,36 @@ class SessionManager:
             "last_updated": progress.get("last_updated"),
             "spoiler_protection": self.is_spoiler_protection_enabled()
         }
+    
+    def update_reading_progress(self, current_page: int):
+        """Update reading progress."""
+        self.update_user_progress(current_page)
+        st.rerun()
+    
+    def mark_as_finished(self):
+        """Mark the book as finished."""
+        progress = self.get_user_progress()
+        total_pages = progress.get("total_pages", 0)
+        if total_pages > 0:
+            self.update_user_progress(total_pages, is_finished=True)
+        else:
+            # If we don't know total pages, just mark as finished
+            progress.update({
+                "is_finished": True,
+                "last_updated": datetime.now().isoformat()
+            })
+            st.session_state[self.keys["user_progress"]] = progress
+        st.rerun()
+    
+    def toggle_spoiler_protection(self):
+        """Toggle spoiler protection on/off."""
+        progress = self.get_user_progress()
+        current_setting = progress.get("spoiler_protection", True)
+        progress.update({
+            "spoiler_protection": not current_setting,
+            "last_updated": datetime.now().isoformat()
+        })
+        st.session_state[self.keys["user_progress"]] = progress
 
 
 # Global session manager instance

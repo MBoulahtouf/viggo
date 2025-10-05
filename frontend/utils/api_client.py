@@ -71,19 +71,13 @@ class APIClient:
     def upload_document(self, file_content: bytes, filename: str) -> Dict[str, Any]:
         """Upload a document for processing."""
         files = {"file": (filename, file_content, "application/octet-stream")}
-        return self._make_request("POST", "/documents/upload", files=files)
+        return self._make_request("POST", "/rag/upload", files=files)
     
     def query_document(self, question: str, page_number: Optional[int] = None) -> Dict[str, Any]:
         """Query the document with RAG."""
         data = {
             "question": question,
-            "page_number": page_number,
-            "context": {
-                "top_k": config.DEFAULT_TOP_K,
-                "similarity_threshold": 0.7,
-                "include_metadata": True,
-                "search_method": "hybrid"
-            }
+            "page_number": page_number
         }
         return self._make_request("POST", "/rag/query", data=data)
     

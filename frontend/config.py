@@ -25,8 +25,8 @@ class FrontendConfig:
     # UI Configuration
     PAGE_CONFIG = {
         "page_title": "Viggo - Intelligent Reading Assistant",
-        "page_icon": "📚",
-        "layout": "wide",
+        "page_icon": None,
+        "layout": "centered",
         "initial_sidebar_state": "expanded"
     }
     
