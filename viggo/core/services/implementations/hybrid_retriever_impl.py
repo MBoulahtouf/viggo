@@ -29,9 +29,8 @@ class HybridRetriever(IHybridRetriever):
     3. Azure Cognitive Search - keyword precision
     """
     
-    def __init__(self, vector_index=None, all_chunks_with_metadata=None, model_name="all-MiniLM-L6-v2"):
-        self.vector_index = vector_index
-        self.all_chunks_with_metadata = all_chunks_with_metadata or []
+    def __init__(self, vector_storage=None, model_name="all-MiniLM-L6-v2"):
+        self.vector_storage = vector_storage
         self.model_name = model_name
         
         # Initialize services
@@ -159,10 +158,10 @@ class HybridRetriever(IHybridRetriever):
     
     def _semantic_search(self, query: str, top_k: int, page_filter: Optional[int] = None) -> List[Dict]:
         """
-        Perform semantic search using FAISS vector similarity with Redis embedding caching.
+        Perform semantic search using Elasticsearch vector similarity with Redis embedding caching.
         """
         try:
-            if not self.vector_index or not self.all_chunks_with_metadata:
+            if not self.vector_storage:
                 return []
             
             # Generate query embedding with Redis caching
@@ -181,35 +180,35 @@ class HybridRetriever(IHybridRetriever):
                     self.redis_cache.cache_embedding(query, query_embedding)
                     print(f"[Redis] Cached embedding for query: {query[:50]}...")
             
-            # Ensure query_embedding is a numpy array
-            if isinstance(query_embedding, list):
-                import numpy as np
-                query_embedding = np.array(query_embedding)
+            # Ensure query_embedding is a list for Elasticsearch
+            if hasattr(query_embedding, 'tolist'):
+                query_embedding = query_embedding.tolist()
+            elif isinstance(query_embedding, list) and len(query_embedding) > 0 and hasattr(query_embedding[0], 'tolist'):
+                query_embedding = query_embedding[0].tolist()
             
-            # Ensure it's 2D for FAISS search
-            if query_embedding.ndim == 1:
-                query_embedding = query_embedding.reshape(1, -1)
+            # Search Elasticsearch index
+            search_results = self.vector_storage.search_vectors(query_embedding, top_k)
             
-            # Search FAISS index
-            distances, indices = self.vector_index.search(query_embedding, top_k)
+            # Filter by page if specified
+            if page_filter is not None:
+                search_results = [r for r in search_results if r.get("metadata", {}).get("page", 0) <= page_filter]
             
             # Get relevant chunks
             results = []
-            for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-                if idx < len(self.all_chunks_with_metadata):
-                    chunk = self.all_chunks_with_metadata[idx]
-                    results.append({
-                        "content": chunk["content"],
-                        "page": chunk.get("page", 0),
-                        "score": 1.0 - distance,  # Convert distance to similarity
-                        "source": "semantic",
-                        "weight": self.weights["semantic"],
-                        "entities": chunk.get("entities", []),
-                        "entity_labels": chunk.get("entity_labels", []),
-                        "chapter_title": chunk.get("chapter_title", ""),
-                        "chunk_type": chunk.get("chunk_type", "standard"),
-                        "document_metadata": chunk.get("document_metadata", {})
-                    })
+            for result in search_results:
+                metadata = result.get("metadata", {})
+                results.append({
+                    "content": result.get("content", ""),
+                    "page": metadata.get("page", 0),
+                    "score": result.get("score", 0.0),
+                    "source": "semantic",
+                    "weight": self.weights["semantic"],
+                    "entities": metadata.get("entities", []),
+                    "entity_labels": metadata.get("entity_labels", []),
+                    "chapter_title": metadata.get("chapter_title", ""),
+                    "chunk_type": metadata.get("chunk_type", "standard"),
+                    "document_metadata": metadata.get("document_metadata", {})
+                })
             
             return results
             

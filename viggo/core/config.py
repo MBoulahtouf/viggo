@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     elasticsearch_api_key: str
     elasticsearch_index_prefix: str = "viggo"
     
+    # Local Elasticsearch Configuration
+    local_elasticsearch_host: str = "localhost"
+    local_elasticsearch_port: int = 9200
+    local_elasticsearch_index: str = "viggo-vectors"
+    
     # Redis Configuration
     redis_host: str = "viggo-redis.redis.cache.windows.net"
     redis_port: int = 6380

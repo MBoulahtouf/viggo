@@ -1,0 +1,28 @@
+# Elasticsearch Configuration for Viggo RAG System
+
+# Basic Elasticsearch settings
+cluster.name: "viggo-cluster"
+node.name: "viggo-node-1"
+network.host: "localhost"
+http.port: 9200
+
+# Memory settings for vector search optimization
+indices.memory.index_buffer_size: 30%
+indices.queries.cache.size: 20%
+indices.fielddata.cache.size: 20%
+
+# Vector search specific settings
+index.knn.algo_param.ef_search: 100
+index.knn.algo_param.ef_construction: 200
+
+# Performance settings
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+# Security (disable for development)
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false
+
+# Logging
+logger.level: INFO
+logger.level.org.elasticsearch.transport: WARN

@@ -13,7 +13,9 @@ from viggo.core.services.interfaces.storage import (
 )
 from .redis_service_impl import RedisService
 from .graph_service_impl import GraphService
-from faiss import IndexFlatL2, write_index, read_index
+from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk
+from viggo.core.config import settings
 
 T = TypeVar('T')
 
@@ -113,103 +115,184 @@ class FileStorageBackend(StorageBackend[T]):
         return StorageType.DOCUMENT
 
 
-class FAISSVectorStorage(VectorStorage):
-    """Concrete implementation of FAISS vector storage."""
+class ElasticsearchVectorStorage(VectorStorage):
+    """Concrete implementation of Elasticsearch vector storage."""
     
-    def __init__(self, index_path: str = "vector_index.bin", dimension: int = 384):
-        self.index_path = index_path
+    def __init__(self, es_client: Elasticsearch = None, index_name: str = None, dimension: int = 384):
+        self.es_client = es_client or self._create_default_client()
+        self.index_name = index_name or settings.local_elasticsearch_index
         self.dimension = dimension
-        self.index = None
-        self.metadata_store = []
-        self._load_index()
+        self._ensure_index_exists()
     
-    def _load_index(self):
-        """Load existing index if available."""
+    def _create_default_client(self) -> Elasticsearch:
+        """Create default Elasticsearch client."""
         try:
-            if os.path.exists(self.index_path):
-                self.index = read_index(self.index_path)
-                print(f"Loaded existing FAISS index with {self.index.ntotal} vectors")
-            else:
-                self.index = IndexFlatL2(self.dimension)
-                print(f"Created new FAISS index with dimension {self.dimension}")
+            return Elasticsearch(
+                hosts=[f"{settings.local_elasticsearch_host}:{settings.local_elasticsearch_port}"],
+                request_timeout=30,
+                retry_on_timeout=True
+            )
         except Exception as e:
-            print(f"Error loading FAISS index: {e}")
-            self.index = IndexFlatL2(self.dimension)
+            print(f"Error creating Elasticsearch client: {e}")
+            return None
     
-    def _save_index(self):
-        """Save index to disk."""
+    def _ensure_index_exists(self):
+        """Ensure the Elasticsearch index exists with proper mapping."""
+        if not self.es_client:
+            return
+            
         try:
-            write_index(self.index, self.index_path)
-            print(f"Saved FAISS index with {self.index.ntotal} vectors")
+            # Check if index exists
+            if not self.es_client.indices.exists(index=self.index_name):
+                self._create_index()
         except Exception as e:
-            print(f"Error saving FAISS index: {e}")
+            print(f"Error ensuring index exists: {e}")
+    
+    def _create_index(self):
+        """Create Elasticsearch index with proper mapping."""
+        mapping = {
+            "mappings": {
+                "properties": {
+                    "content": {
+                        "type": "text",
+                        "analyzer": "standard"
+                    },
+                    "content_vector": {
+                        "type": "dense_vector",
+                        "dims": self.dimension,
+                        "index": True,
+                        "similarity": "l2_norm"
+                    },
+                    "page": {
+                        "type": "integer"
+                    },
+                    "chunk_id": {
+                        "type": "keyword"
+                    },
+                    "entities": {
+                        "type": "keyword"
+                    },
+                    "entity_labels": {
+                        "type": "keyword"
+                    },
+                    "chapter_title": {
+                        "type": "text"
+                    },
+                    "chunk_type": {
+                        "type": "keyword"
+                    },
+                    "lore_significance": {
+                        "type": "float"
+                    },
+                    "word_count": {
+                        "type": "integer"
+                    },
+                    "char_count": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "settings": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0,
+                "index.knn": True,
+                "index.knn.algo_param.ef_search": 100
+            }
+        }
+        
+        try:
+            self.es_client.indices.create(index=self.index_name, body=mapping)
+            print(f"Created Elasticsearch index: {self.index_name}")
+        except Exception as e:
+            print(f"Error creating index: {e}")
     
     def add_vectors(self, vectors: List[List[float]], metadata: List[Dict[str, Any]]) -> bool:
-        """Add vectors to the storage."""
+        """Add vectors to Elasticsearch index."""
+        if not self.es_client:
+            print("Elasticsearch client not available")
+            return False
+            
         try:
             if not vectors:
                 return True
             
-            # Ensure vectors are numpy arrays
-            import numpy as np
-            vectors_array = np.array(vectors, dtype=np.float32)
+            bulk_actions = []
+            for i, (vector, meta) in enumerate(zip(vectors, metadata)):
+                doc = {
+                    "content_vector": vector,
+                    **meta
+                }
+                bulk_actions.append({
+                    "_index": self.index_name,
+                    "_source": doc
+                })
             
-            # Add to index
-            self.index.add(vectors_array)
-            
-            # Store metadata
-            self.metadata_store.extend(metadata)
-            
-            # Save index
-            self._save_index()
-            
-            return True
+            # Bulk index
+            response = bulk(self.es_client, bulk_actions)
+            print(f"Indexed {response[0]} vectors to Elasticsearch")
+            return response[0] > 0
             
         except Exception as e:
-            print(f"Error adding vectors: {e}")
+            print(f"Error adding vectors to Elasticsearch: {e}")
             return False
     
     def search_vectors(self, query_vector: List[float], top_k: int) -> List[Dict[str, Any]]:
-        """Search for similar vectors."""
+        """Search for similar vectors using Elasticsearch."""
+        if not self.es_client:
+            return []
+            
         try:
-            if self.index.ntotal == 0:
-                return []
+            query = {
+                "knn": {
+                    "field": "content_vector",
+                    "query_vector": query_vector,
+                    "k": top_k,
+                    "num_candidates": top_k * 10
+                }
+            }
             
-            # Ensure query vector is numpy array
-            import numpy as np
-            query_array = np.array([query_vector], dtype=np.float32)
+            response = self.es_client.search(
+                index=self.index_name,
+                body={"query": query},
+                size=top_k
+            )
             
-            # Search
-            distances, indices = self.index.search(query_array, top_k)
-            
-            # Build results
             results = []
-            for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-                if idx < len(self.metadata_store):
-                    result = {
-                        "content": self.metadata_store[idx].get("content", ""),
-                        "score": 1.0 - distance,  # Convert distance to similarity
-                        "metadata": self.metadata_store[idx],
-                        "index": int(idx)
-                    }
-                    results.append(result)
+            for hit in response['hits']['hits']:
+                result = {
+                    "content": hit['_source'].get('content', ''),
+                    "score": hit['_score'],
+                    "metadata": hit['_source'],
+                    "index": hit['_id']
+                }
+                results.append(result)
             
             return results
             
         except Exception as e:
-            print(f"Error searching vectors: {e}")
+            print(f"Error searching vectors in Elasticsearch: {e}")
             return []
     
     def get_vector_count(self) -> int:
         """Get the number of stored vectors."""
-        return self.index.ntotal if self.index else 0
+        if not self.es_client:
+            return 0
+            
+        try:
+            response = self.es_client.count(index=self.index_name)
+            return response['count']
+        except Exception as e:
+            print(f"Error getting vector count: {e}")
+            return 0
     
     def clear_vectors(self) -> bool:
         """Clear all vectors from storage."""
+        if not self.es_client:
+            return False
+            
         try:
-            self.index = IndexFlatL2(self.dimension)
-            self.metadata_store.clear()
-            self._save_index()
+            self.es_client.indices.delete(index=self.index_name)
+            self._create_index()
             return True
         except Exception as e:
             print(f"Error clearing vectors: {e}")

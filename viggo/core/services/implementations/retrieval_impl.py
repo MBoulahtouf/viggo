@@ -16,11 +16,10 @@ from .graph_service_impl import GraphService
 
 
 class SemanticRetriever(Retriever):
-    """Concrete implementation of semantic retriever using FAISS."""
+    """Concrete implementation of semantic retriever using Elasticsearch."""
     
-    def __init__(self, vector_index, chunks_metadata: List[Dict], model_name: str = "all-MiniLM-L6-v2"):
-        self.vector_index = vector_index
-        self.chunks_metadata = chunks_metadata
+    def __init__(self, vector_storage, model_name: str = "all-MiniLM-L6-v2"):
+        self.vector_storage = vector_storage
         self.model_name = model_name
         self._model = None
     
@@ -39,29 +38,28 @@ class SemanticRetriever(Retriever):
         try:
             # Generate query embedding
             model = self._get_model()
-            query_embedding = model.encode([context.query])
+            query_embedding = model.encode([context.query])[0].tolist()
             
-            # Search FAISS index
-            distances, indices = self.vector_index.search(query_embedding, context.top_k)
+            # Search Elasticsearch index
+            search_results = self.vector_storage.search_vectors(query_embedding, context.top_k)
             
             results = []
-            for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-                if idx < len(self.chunks_metadata):
-                    chunk = self.chunks_metadata[idx]
-                    result = RetrievalResult(
-                        content=chunk["content"],
-                        score=1.0 - distance,  # Convert distance to similarity
-                        source=RetrievalSource.SEMANTIC,
-                        metadata={
-                            "chunk_id": chunk.get("id", f"chunk_{idx}"),
-                            "entities": chunk.get("entities", []),
-                            "chapter_title": chunk.get("chapter_title", ""),
-                            "lore_significance": chunk.get("lore_significance", 0.0)
-                        },
-                        page_number=chunk.get("page", 0),
-                        chunk_id=chunk.get("id", f"chunk_{idx}")
-                    )
-                    results.append(result)
+            for result in search_results:
+                metadata = result.get("metadata", {})
+                retrieval_result = RetrievalResult(
+                    content=result.get("content", ""),
+                    score=result.get("score", 0.0),
+                    source=RetrievalSource.SEMANTIC,
+                    metadata={
+                        "chunk_id": metadata.get("chunk_id", ""),
+                        "entities": metadata.get("entities", []),
+                        "chapter_title": metadata.get("chapter_title", ""),
+                        "lore_significance": metadata.get("lore_significance", 0.0)
+                    },
+                    page_number=metadata.get("page", 0),
+                    chunk_id=metadata.get("chunk_id", "")
+                )
+                results.append(retrieval_result)
             
             return results
             
@@ -75,7 +73,7 @@ class SemanticRetriever(Retriever):
     
     def is_available(self) -> bool:
         """Check if the retriever is available."""
-        return self.vector_index is not None and len(self.chunks_metadata) > 0
+        return self.vector_storage is not None and self.vector_storage.get_vector_count() > 0
 
 
 class KeywordRetriever(Retriever):
