@@ -2,10 +2,11 @@
 RAG-specific models and schemas for the Viggo system.
 """
 
-from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field, validator
 
 
 class HybridSearchConfig(BaseModel):
@@ -21,24 +22,24 @@ class HybridSearchConfig(BaseModel):
 class QueryContext(BaseModel):
     """Enhanced context for hybrid RAG queries."""
     query: str = Field(..., description="The query text")
-    page_filter: Optional[int] = Field(None, description="Filter by specific page number")
+    page_filter: int | None = Field(None, description="Filter by specific page number")
     top_k: int = Field(5, ge=1, le=50, description="Number of results to return")
     similarity_threshold: float = Field(0.7, ge=0.0, le=1.0, description="Minimum similarity score")
     include_metadata: bool = Field(True, description="Include metadata in results")
     search_method: str = Field("hybrid", description="Search method: semantic, keyword, graph, hybrid")
-    hybrid_config: Optional[HybridSearchConfig] = Field(None, description="Hybrid search configuration")
-    extracted_entities: List[str] = Field(default_factory=list, description="Entities extracted from query")
-    user_context: Dict[str, Any] = Field(default_factory=dict, description="User-specific context")
+    hybrid_config: HybridSearchConfig | None = Field(None, description="Hybrid search configuration")
+    extracted_entities: list[str] = Field(default_factory=list, description="Entities extracted from query")
+    user_context: dict[str, Any] = Field(default_factory=dict, description="User-specific context")
     spoiler_protection: bool = Field(False, description="Enable spoiler protection")
-    max_page: Optional[int] = Field(None, description="Maximum page for spoiler protection")
+    max_page: int | None = Field(None, description="Maximum page for spoiler protection")
 
 
 class QueryRequest(BaseModel):
     """Request model for RAG queries."""
     question: str = Field(..., min_length=1, max_length=1000, description="The question to ask")
-    page_number: Optional[int] = Field(None, ge=1, description="Specific page number to focus on")
-    context: Optional[QueryContext] = Field(None, description="Additional query context")
-    
+    page_number: int | None = Field(None, ge=1, description="Specific page number to focus on")
+    context: QueryContext | None = Field(None, description="Additional query context")
+
     @validator('question')
     def validate_question(cls, v):
         if not v.strip():
@@ -60,13 +61,13 @@ class SourcePage(BaseModel):
     page_number: int = Field(..., description="Page number")
     content: str = Field(..., description="Page content")
     relevance_score: float = Field(..., ge=0.0, le=1.0, description="Relevance score")
-    chunk_id: Optional[str] = Field(None, description="Chunk identifier")
+    chunk_id: str | None = Field(None, description="Chunk identifier")
     retrieval_source: RetrievalSource = Field(..., description="Which retrieval method found this source")
-    semantic_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Semantic similarity score")
-    keyword_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Keyword matching score")
-    graph_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Graph relationship score")
-    entity_matches: List[str] = Field(default_factory=list, description="Entities found in this source")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional source metadata")
+    semantic_score: float | None = Field(None, ge=0.0, le=1.0, description="Semantic similarity score")
+    keyword_score: float | None = Field(None, ge=0.0, le=1.0, description="Keyword matching score")
+    graph_score: float | None = Field(None, ge=0.0, le=1.0, description="Graph relationship score")
+    entity_matches: list[str] = Field(default_factory=list, description="Entities found in this source")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional source metadata")
 
 
 class HybridSearchMetrics(BaseModel):
@@ -86,15 +87,15 @@ class QueryResponse(BaseModel):
     """Enhanced response model for hybrid RAG queries."""
     question: str = Field(..., description="The original question")
     answer: str = Field(..., description="Generated answer")
-    source_pages: List[SourcePage] = Field(..., description="Source pages used for the answer")
+    source_pages: list[SourcePage] = Field(..., description="Source pages used for the answer")
     search_method: str = Field(..., description="Search method used")
     processing_time: float = Field(..., description="Total processing time in seconds")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence in the answer")
-    hybrid_metrics: Optional[HybridSearchMetrics] = Field(None, description="Hybrid search performance metrics")
-    extracted_entities: List[str] = Field(default_factory=list, description="Entities extracted from query")
-    related_entities: List[str] = Field(default_factory=list, description="Related entities found")
+    hybrid_metrics: HybridSearchMetrics | None = Field(None, description="Hybrid search performance metrics")
+    extracted_entities: list[str] = Field(default_factory=list, description="Entities extracted from query")
+    related_entities: list[str] = Field(default_factory=list, description="Related entities found")
     spoiler_protection_applied: bool = Field(False, description="Whether spoiler protection was applied")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
 class DocumentInfo(BaseModel):
@@ -152,8 +153,8 @@ class IndexingResponse(BaseModel):
     entities_extracted: int = Field(0, ge=0, description="Number of entities extracted")
     relationships_created: int = Field(0, ge=0, description="Number of relationships created")
     processing_time: float = Field(0.0, description="Processing time in seconds")
-    error_message: Optional[str] = Field(None, description="Error message if failed")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    error_message: str | None = Field(None, description="Error message if failed")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
 class RAGConfig(BaseModel):
@@ -175,7 +176,7 @@ class RAGStatus(BaseModel):
     total_chunks: int = Field(0, ge=0, description="Total number of chunks")
     total_entities: int = Field(0, ge=0, description="Total number of entities")
     total_relationships: int = Field(0, ge=0, description="Total number of relationships")
-    last_indexed: Optional[datetime] = Field(None, description="Last indexing timestamp")
+    last_indexed: datetime | None = Field(None, description="Last indexing timestamp")
     system_health: str = Field(..., description="Overall system health")
 
 
@@ -184,10 +185,10 @@ class EntityInfo(BaseModel):
     name: str = Field(..., description="Entity name")
     entity_type: str = Field(..., description="Type of entity (person, place, concept, etc.)")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Entity extraction confidence")
-    aliases: List[str] = Field(default_factory=list, description="Alternative names for the entity")
-    canonical_name: Optional[str] = Field(None, description="Canonical name for the entity")
-    page_references: List[int] = Field(default_factory=list, description="Pages where entity appears")
-    relationships: List[str] = Field(default_factory=list, description="Related entities")
+    aliases: list[str] = Field(default_factory=list, description="Alternative names for the entity")
+    canonical_name: str | None = Field(None, description="Canonical name for the entity")
+    page_references: list[int] = Field(default_factory=list, description="Pages where entity appears")
+    relationships: list[str] = Field(default_factory=list, description="Related entities")
 
 
 class RelationshipInfo(BaseModel):
@@ -196,7 +197,7 @@ class RelationshipInfo(BaseModel):
     target_entity: str = Field(..., description="Target entity name")
     relationship_type: str = Field(..., description="Type of relationship")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Relationship confidence")
-    page_references: List[int] = Field(default_factory=list, description="Pages where relationship appears")
+    page_references: list[int] = Field(default_factory=list, description="Pages where relationship appears")
     context: str = Field(..., description="Context of the relationship")
 
 
@@ -207,19 +208,19 @@ class HybridRAGStatus(BaseModel):
     total_chunks: int = Field(0, ge=0, description="Total number of chunks")
     total_entities: int = Field(0, ge=0, description="Total number of entities")
     total_relationships: int = Field(0, ge=0, description="Total number of relationships")
-    last_indexed: Optional[datetime] = Field(None, description="Last indexing timestamp")
+    last_indexed: datetime | None = Field(None, description="Last indexing timestamp")
     system_health: str = Field(..., description="Overall system health")
-    hybrid_components: Dict[str, Dict[str, Any]] = Field(..., description="Status of hybrid components")
-    retrieval_performance: Dict[str, float] = Field(default_factory=dict, description="Retrieval performance metrics")
+    hybrid_components: dict[str, dict[str, Any]] = Field(..., description="Status of hybrid components")
+    retrieval_performance: dict[str, float] = Field(default_factory=dict, description="Retrieval performance metrics")
 
 
 class SystemStatus(BaseModel):
     """Overall system status."""
     rag_status: HybridRAGStatus = Field(..., description="Hybrid RAG system status")
-    vector_storage: Dict[str, Any] = Field(..., description="Vector storage status")
-    graph_storage: Dict[str, Any] = Field(..., description="Graph storage status")
-    cache_storage: Dict[str, Any] = Field(..., description="Cache storage status")
-    retrievers: Dict[str, Any] = Field(..., description="Retriever status")
-    generators: Dict[str, Any] = Field(..., description="Generator status")
+    vector_storage: dict[str, Any] = Field(..., description="Vector storage status")
+    graph_storage: dict[str, Any] = Field(..., description="Graph storage status")
+    cache_storage: dict[str, Any] = Field(..., description="Cache storage status")
+    retrievers: dict[str, Any] = Field(..., description="Retriever status")
+    generators: dict[str, Any] = Field(..., description="Generator status")
     uptime: float = Field(..., description="System uptime in seconds")
     version: str = Field(..., description="System version")

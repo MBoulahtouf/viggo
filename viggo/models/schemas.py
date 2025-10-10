@@ -2,28 +2,28 @@
 # Legacy schemas for backward compatibility
 # New models should use the organized model files in this package
 
-from pydantic import BaseModel
-from typing import List, Any, Dict
+from typing import Any
 
-# Import new models for backward compatibility
+from pydantic import BaseModel
+
+from .graph_models import CanonicalGroup as GroupedNodeModel
+from .graph_models import EntityGraphResponse as NewEntityGraphResponse
+from .graph_models import GroupedNodeListResponse as NewGroupedNodeListResponse
+from .graph_models import NodeListResponse as NewNodeListResponse
+from .graph_models import NodeModel as NewNodeModel
+from .rag_models import DocumentInfo as DocumentInfoResponse
+from .rag_models import DocumentUploadResponse as NewDocumentUploadResponse
 from .rag_models import (
-    QueryRequest as NewQueryRequest,
-    QueryResponse as NewQueryResponse,
-    DocumentUploadResponse as NewDocumentUploadResponse,
-    DocumentInfo as DocumentInfoResponse,
-    RetrievalSource,
+    EntityInfo,
     HybridSearchConfig,
     HybridSearchMetrics,
-    EntityInfo,
-    RelationshipInfo
+    RelationshipInfo,
+    RetrievalSource,
 )
-from .graph_models import (
-    NodeModel as NewNodeModel,
-    NodeListResponse as NewNodeListResponse,
-    CanonicalGroup as GroupedNodeModel,
-    GroupedNodeListResponse as NewGroupedNodeListResponse,
-    EntityGraphResponse as NewEntityGraphResponse
-)
+
+# Import new models for backward compatibility
+from .rag_models import QueryRequest as NewQueryRequest
+from .rag_models import QueryResponse as NewQueryResponse
 
 # Legacy aliases for backward compatibility
 QueryRequest = NewQueryRequest
@@ -41,12 +41,12 @@ __all__ = [
     # Legacy models
     'QueryRequest', 'QueryResponse', 'DocumentUploadResponse', 'DocumentInfoResponse',
     'NodeModel', 'NodeListResponse', 'GroupedNodeModel', 'GroupedNodeListResponse', 'EntityGraphResponse',
-    
+
     # New hybrid RAG models
     'RetrievalSource', 'HybridSearchConfig', 'HybridSearchMetrics', 'EntityInfo', 'RelationshipInfo',
-    
+
     # Legacy compatibility models
-    'LegacyQueryRequest', 'LegacyQueryResponse', 'LegacyDocumentInfoResponse', 
+    'LegacyQueryRequest', 'LegacyQueryResponse', 'LegacyDocumentInfoResponse',
     'LegacyDocumentUploadResponse', 'LegacyNodeModel', 'LegacyNodeListResponse',
     'LegacyGroupedNodeModel', 'LegacyGroupedNodeListResponse', 'LegacyEntityGraphResponse'
 ]
@@ -61,7 +61,7 @@ class LegacyQueryResponse(BaseModel):
     """Legacy query response model."""
     question: str
     answer: str
-    source_pages: List[int]
+    source_pages: list[int]
 
 class LegacyDocumentInfoResponse(BaseModel):
     """Legacy document info response model."""
@@ -79,21 +79,21 @@ class LegacyDocumentUploadResponse(BaseModel):
 class LegacyNodeModel(BaseModel):
     """Legacy node model."""
     name: str
-    labels: List[str]
+    labels: list[str]
 
 class LegacyNodeListResponse(BaseModel):
     """Legacy node list response model."""
-    nodes: List[LegacyNodeModel]
+    nodes: list[LegacyNodeModel]
 
 class LegacyGroupedNodeModel(BaseModel):
     """Legacy grouped node model."""
     canonical: str
-    aliases: List[str]
-    labels: List[str]
+    aliases: list[str]
+    labels: list[str]
 
 class LegacyGroupedNodeListResponse(BaseModel):
     """Legacy grouped node list response model."""
-    grouped_nodes: List[LegacyGroupedNodeModel]
+    grouped_nodes: list[LegacyGroupedNodeModel]
 
 class LegacyEntityGraphResponse(BaseModel):
     """Legacy entity graph response model."""
