@@ -88,11 +88,52 @@ For a quick setup, see our [Quick Start Guide](docs/QUICKSTART.md).
    poetry run python -m spacy download en_core_web_sm
    ```
 
+## Multi-Agent Framework
+
+Viggo now features a sophisticated multi-agent framework that enhances query processing and response generation:
+
+- **Query Analyzer Agent**: Intelligent intent detection (character, plot, setting, relationship queries)
+- **Entity Extractor Agent**: Advanced entity and relationship extraction from text
+- **Context Aggregator Agent**: Hybrid context aggregation from multiple sources
+- **Response Generator Agent**: Template-based response generation with fallback mechanisms
+- **Azure GraphRAG Service**: Advanced relationship extraction using Microsoft GraphRAG approach
+
+The framework follows SOLID principles and integrates seamlessly with Azure Search and Neo4j for enhanced retrieval capabilities.
+
 ## Testing
 
-Run the test suite:
+Run the comprehensive test suite:
 ```bash
+# Run all tests
 poetry run pytest
+
+# Run multi-agent specific tests
+poetry run pytest tests/test_multi_agent_*.py -v
+
+# Run with coverage
+poetry run pytest --cov=viggo --cov-report=html
 ```
 
-For more testing information, see the [Development Guide](docs/DEVELOPMENT.md#testing).
+### Test Categories
+- **Core Tests**: Basic functionality and SOLID principles compliance
+- **Framework Tests**: Full multi-agent integration testing
+- **Integration Tests**: End-to-end system testing
+- **Unit Tests**: Individual component testing
+
+For more testing information, see the [Test Documentation](tests/README.md) and [Development Guide](docs/DEVELOPMENT.md#testing).
+
+## CI/CD Pipeline
+
+Viggo includes a comprehensive CI/CD pipeline with GitHub Actions:
+- **Multi-Agent Tests**: Dedicated testing for the multi-agent framework
+- **Quality Checks**: Linting (Ruff), type checking (MyPy), security scanning (Bandit)
+- **Code Coverage**: Automated coverage reporting with Codecov
+- **Dependency Management**: Poetry-based dependency management
+
+## Architecture
+
+Viggo uses a hybrid RAG architecture combining:
+- **Vector Search**: Azure Search for semantic similarity
+- **Graph Search**: Neo4j for relationship-based retrieval
+- **Multi-Agent Processing**: Specialized agents for different query types
+- **Spoiler Protection**: Page-based content filtering
