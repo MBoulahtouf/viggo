@@ -13,7 +13,11 @@ from viggo.core.services.interfaces.storage import (
 )
 from .redis_service_impl import RedisService
 from .graph_service_impl import GraphService
-from faiss import IndexFlatL2, write_index, read_index
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.models import VectorizedQuery
+from azure.core.credentials import AzureKeyCredential
+from viggo.core.config import settings
 
 T = TypeVar('T')
 
@@ -113,103 +117,269 @@ class FileStorageBackend(StorageBackend[T]):
         return StorageType.DOCUMENT
 
 
-class FAISSVectorStorage(VectorStorage):
-    """Concrete implementation of FAISS vector storage."""
+class AzureSearchVectorStorage(VectorStorage):
+    """Concrete implementation of Azure Cognitive Search vector storage."""
     
-    def __init__(self, index_path: str = "vector_index.bin", dimension: int = 384):
-        self.index_path = index_path
+    def __init__(self, search_client: SearchClient = None, index_client: SearchIndexClient = None, 
+                 index_name: str = None, dimension: int = 384):
         self.dimension = dimension
-        self.index = None
-        self.metadata_store = []
-        self._load_index()
+        self.index_name = index_name or f"{settings.elasticsearch_index_prefix}-vectors"
+        
+        # Initialize Azure Search clients
+        if search_client and index_client:
+            self.search_client = search_client
+            self.index_client = index_client
+        else:
+            self.search_client = self._create_search_client()
+            self.index_client = self._create_index_client()
+        
+        # Ensure index exists
+        self._ensure_index_exists()
     
-    def _load_index(self):
-        """Load existing index if available."""
+    def _create_search_client(self) -> SearchClient:
+        """Create Azure Search client."""
         try:
-            if os.path.exists(self.index_path):
-                self.index = read_index(self.index_path)
-                print(f"Loaded existing FAISS index with {self.index.ntotal} vectors")
-            else:
-                self.index = IndexFlatL2(self.dimension)
-                print(f"Created new FAISS index with dimension {self.dimension}")
+            return SearchClient(
+                endpoint=settings.elasticsearch_url,
+                index_name=self.index_name,
+                credential=AzureKeyCredential(settings.elasticsearch_api_key)
+            )
         except Exception as e:
-            print(f"Error loading FAISS index: {e}")
-            self.index = IndexFlatL2(self.dimension)
+            print(f"Error creating Azure Search client: {e}")
+            return None
     
-    def _save_index(self):
-        """Save index to disk."""
+    def _create_index_client(self) -> SearchIndexClient:
+        """Create Azure Search index client."""
         try:
-            write_index(self.index, self.index_path)
-            print(f"Saved FAISS index with {self.index.ntotal} vectors")
+            return SearchIndexClient(
+                endpoint=settings.elasticsearch_url,
+                credential=AzureKeyCredential(settings.elasticsearch_api_key)
+            )
         except Exception as e:
-            print(f"Error saving FAISS index: {e}")
+            print(f"Error creating Azure Search index client: {e}")
+            return None
+    
+    def _ensure_index_exists(self):
+        """Ensure the Azure Search index exists with proper mapping."""
+        if not self.index_client:
+            return
+            
+        try:
+            # Check if index exists
+            if not self.index_client.get_index(self.index_name):
+                self._create_index()
+        except Exception:
+            # Index doesn't exist, create it
+            self._create_index()
+    
+    def _create_index(self):
+        """Create Azure Search index with proper mapping."""
+        index_definition = {
+            "name": self.index_name,
+            "fields": [
+                {
+                    "name": "id",
+                    "type": "Edm.String",
+                    "key": True,
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": False,
+                    "facetable": False
+                },
+                {
+                    "name": "content",
+                    "type": "Edm.String",
+                    "searchable": True,
+                    "filterable": False,
+                    "sortable": False,
+                    "facetable": False
+                },
+                {
+                    "name": "content_vector",
+                    "type": "Collection(Edm.Single)",
+                    "searchable": True,
+                    "filterable": False,
+                    "sortable": False,
+                    "facetable": False,
+                    "dimensions": self.dimension,
+                    "vectorSearchConfiguration": "default-vector-config"
+                },
+                {
+                    "name": "page",
+                    "type": "Edm.Int32",
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": True,
+                    "facetable": False
+                },
+                {
+                    "name": "chunk_id",
+                    "type": "Edm.String",
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": False,
+                    "facetable": False
+                },
+                {
+                    "name": "entities",
+                    "type": "Collection(Edm.String)",
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": False,
+                    "facetable": True
+                },
+                {
+                    "name": "entity_labels",
+                    "type": "Collection(Edm.String)",
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": False,
+                    "facetable": True
+                },
+                {
+                    "name": "chapter_title",
+                    "type": "Edm.String",
+                    "searchable": True,
+                    "filterable": True,
+                    "sortable": False,
+                    "facetable": True
+                },
+                {
+                    "name": "chunk_type",
+                    "type": "Edm.String",
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": False,
+                    "facetable": True
+                },
+                {
+                    "name": "lore_significance",
+                    "type": "Edm.Double",
+                    "searchable": False,
+                    "filterable": True,
+                    "sortable": True,
+                    "facetable": False
+                }
+            ],
+            "vectorSearch": {
+                "algorithmConfigurations": [
+                    {
+                        "name": "default-vector-config",
+                        "kind": "hnsw",
+                        "hnswParameters": {
+                            "m": 4,
+                            "efConstruction": 400,
+                            "efSearch": 500,
+                            "metric": "cosine"
+                        }
+                    }
+                ]
+            }
+        }
+        
+        try:
+            from azure.search.documents.indexes.models import SearchIndex
+            search_index = SearchIndex(**index_definition)
+            self.index_client.create_index(search_index)
+            print(f"Created Azure Search index: {self.index_name}")
+        except Exception as e:
+            print(f"Error creating Azure Search index: {e}")
     
     def add_vectors(self, vectors: List[List[float]], metadata: List[Dict[str, Any]]) -> bool:
-        """Add vectors to the storage."""
+        """Add vectors to Azure Search index."""
+        if not self.search_client:
+            print("Azure Search client not available")
+            return False
+            
         try:
             if not vectors:
                 return True
             
-            # Ensure vectors are numpy arrays
-            import numpy as np
-            vectors_array = np.array(vectors, dtype=np.float32)
+            # Prepare documents for indexing
+            documents = []
+            for i, (vector, meta) in enumerate(zip(vectors, metadata)):
+                doc = {
+                    "id": meta.get("chunk_id", f"chunk_{i}"),
+                    "content_vector": vector,
+                    **meta
+                }
+                documents.append(doc)
             
-            # Add to index
-            self.index.add(vectors_array)
-            
-            # Store metadata
-            self.metadata_store.extend(metadata)
-            
-            # Save index
-            self._save_index()
-            
-            return True
+            # Index documents
+            result = self.search_client.upload_documents(documents)
+            print(f"Indexed {len(documents)} vectors to Azure Search")
+            return len(result) > 0
             
         except Exception as e:
-            print(f"Error adding vectors: {e}")
+            print(f"Error adding vectors to Azure Search: {e}")
             return False
     
     def search_vectors(self, query_vector: List[float], top_k: int) -> List[Dict[str, Any]]:
-        """Search for similar vectors."""
-        try:
-            if self.index.ntotal == 0:
-                return []
+        """Search for similar vectors using Azure Search."""
+        if not self.search_client:
+            return []
             
-            # Ensure query vector is numpy array
-            import numpy as np
-            query_array = np.array([query_vector], dtype=np.float32)
+        try:
+            # Create vectorized query
+            vector_query = VectorizedQuery(
+                vector=query_vector,
+                k_nearest_neighbors=top_k,
+                fields="content_vector"
+            )
             
             # Search
-            distances, indices = self.index.search(query_array, top_k)
+            results = self.search_client.search(
+                search_text="",
+                vector_queries=[vector_query],
+                top=top_k
+            )
             
-            # Build results
-            results = []
-            for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-                if idx < len(self.metadata_store):
-                    result = {
-                        "content": self.metadata_store[idx].get("content", ""),
-                        "score": 1.0 - distance,  # Convert distance to similarity
-                        "metadata": self.metadata_store[idx],
-                        "index": int(idx)
-                    }
-                    results.append(result)
+            search_results = []
+            for result in results:
+                search_result = {
+                    "content": result.get("content", ""),
+                    "score": result.get("@search.score", 0.0),
+                    "metadata": {
+                        "chunk_id": result.get("chunk_id", ""),
+                        "page": result.get("page", 0),
+                        "entities": result.get("entities", []),
+                        "entity_labels": result.get("entity_labels", []),
+                        "chapter_title": result.get("chapter_title", ""),
+                        "chunk_type": result.get("chunk_type", "standard"),
+                        "lore_significance": result.get("lore_significance", 0.0)
+                    },
+                    "index": result.get("id", "")
+                }
+                search_results.append(search_result)
             
-            return results
+            return search_results
             
         except Exception as e:
-            print(f"Error searching vectors: {e}")
+            print(f"Error searching vectors in Azure Search: {e}")
             return []
     
     def get_vector_count(self) -> int:
         """Get the number of stored vectors."""
-        return self.index.ntotal if self.index else 0
+        if not self.search_client:
+            return 0
+            
+        try:
+            # Get document count
+            result = self.search_client.get_document_count()
+            return result
+        except Exception as e:
+            print(f"Error getting vector count: {e}")
+            return 0
     
     def clear_vectors(self) -> bool:
         """Clear all vectors from storage."""
+        if not self.index_client:
+            return False
+            
         try:
-            self.index = IndexFlatL2(self.dimension)
-            self.metadata_store.clear()
-            self._save_index()
+            # Delete and recreate index
+            self.index_client.delete_index(self.index_name)
+            self._create_index()
             return True
         except Exception as e:
             print(f"Error clearing vectors: {e}")

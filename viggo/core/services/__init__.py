@@ -46,7 +46,7 @@ from .implementations import (
     LLMTextGenerator, TemplateTextGenerator, RAGPromptTemplate, ConcreteGenerationService,
     
     # Storage
-    FileStorageBackend, FAISSVectorStorage, Neo4jGraphStorage, RedisCacheStorage,
+    FileStorageBackend, AzureSearchVectorStorage, Neo4jGraphStorage, RedisCacheStorage,
     
     # RAG
     ConcreteRAGService, ConcreteRAGOrchestrator,
@@ -86,7 +86,7 @@ __all__ = [
     'HybridChunkingStrategy', 'StandardChunkingStrategy', 'ConcreteChunkingService',
     'SemanticRetriever', 'KeywordRetriever', 'GraphRetriever', 'ConcreteHybridRetriever', 'WeightedResultRanker',
     'LLMTextGenerator', 'TemplateTextGenerator', 'RAGPromptTemplate', 'ConcreteGenerationService',
-    'FileStorageBackend', 'FAISSVectorStorage', 'Neo4jGraphStorage', 'RedisCacheStorage',
+    'FileStorageBackend', 'AzureSearchVectorStorage', 'Neo4jGraphStorage', 'RedisCacheStorage',
     'ConcreteRAGService', 'ConcreteRAGOrchestrator',
     'GraphService', 'HybridRetriever', 'HybridSearchService', 'PerformanceOptimizer', 'RedisService', 'AliasingService',
     

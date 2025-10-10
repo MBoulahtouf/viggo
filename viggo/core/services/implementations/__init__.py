@@ -22,7 +22,7 @@ from .generation_impl import (
 
 # Storage implementations
 from .storage_impl import (
-    FileStorageBackend, FAISSVectorStorage, Neo4jGraphStorage, RedisCacheStorage
+    FileStorageBackend, AzureSearchVectorStorage, Neo4jGraphStorage, RedisCacheStorage
 )
 
 # RAG implementations
@@ -58,7 +58,7 @@ __all__ = [
     'LLMTextGenerator', 'TemplateTextGenerator', 'RAGPromptTemplate', 'ConcreteGenerationService',
     
     # Storage
-    'FileStorageBackend', 'FAISSVectorStorage', 'Neo4jGraphStorage', 'RedisCacheStorage',
+    'FileStorageBackend', 'AzureSearchVectorStorage', 'Neo4jGraphStorage', 'RedisCacheStorage',
     
     # RAG
     'ConcreteRAGService', 'ConcreteRAGOrchestrator',

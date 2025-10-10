@@ -15,7 +15,7 @@ from .document_processor_impl import ConcreteDocumentProcessorFactory
 from .chunking_impl import ConcreteChunkingService, HybridChunkingStrategy
 from .retrieval_impl import ConcreteHybridRetriever, SemanticRetriever, KeywordRetriever, GraphRetriever
 from .generation_impl import ConcreteGenerationService, LLMTextGenerator, TemplateTextGenerator
-from .storage_impl import FAISSVectorStorage, Neo4jGraphStorage, RedisCacheStorage
+from .storage_impl import AzureSearchVectorStorage, Neo4jGraphStorage, RedisCacheStorage
 from .rag_service_impl import ConcreteRAGService
 
 from .graph_service_impl import GraphService
@@ -83,7 +83,7 @@ class ConcreteRAGOrchestrator(RAGOrchestrator):
         chunking_service.set_strategy(HybridChunkingStrategy())
         
         # Vector storage
-        vector_storage = FAISSVectorStorage(index_path=vector_index_path)
+        vector_storage = AzureSearchVectorStorage()
         
         # Graph storage
         if graph_service:
@@ -140,7 +140,7 @@ class ConcreteRAGOrchestrator(RAGOrchestrator):
         chunking_service.set_strategy(chunking_service.create_strategy("standard"))
         
         # Vector storage
-        vector_storage = FAISSVectorStorage()
+        vector_storage = AzureSearchVectorStorage()
         
         # Hybrid retriever (empty for now)
         hybrid_retriever = ConcreteHybridRetriever()
@@ -177,7 +177,7 @@ class ConcreteRAGOrchestrator(RAGOrchestrator):
             chunking_service.set_strategy(strategy)
         
         # Storage backends
-        vector_storage = components.get('vector_storage', FAISSVectorStorage())
+        vector_storage = components.get('vector_storage', AzureSearchVectorStorage())
         graph_storage = components.get('graph_storage')
         cache_storage = components.get('cache_storage')
         
