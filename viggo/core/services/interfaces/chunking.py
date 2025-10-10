@@ -3,9 +3,9 @@ Chunking interfaces following SOLID principles.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class ChunkLevel(Enum):
@@ -24,13 +24,13 @@ class ChunkMetadata:
     page_number: int
     word_count: int
     char_count: int
-    chapter_title: Optional[str] = None
+    chapter_title: str | None = None
     content_type: str = "story_content"
     lore_significance: float = 0.0
-    entities: List[Dict[str, Any]] = None
-    relationships: List[Dict[str, Any]] = None
-    parent_id: Optional[str] = None
-    
+    entities: list[dict[str, Any]] = None
+    relationships: list[dict[str, Any]] = None
+    parent_id: str | None = None
+
     def __post_init__(self):
         if self.entities is None:
             self.entities = []
@@ -50,20 +50,20 @@ class Chunk:
 @dataclass
 class ChunkingResult:
     """Result of document chunking process."""
-    chunks: Dict[ChunkLevel, List[Chunk]]
-    metadata: Dict[str, ChunkMetadata]
-    hierarchy: Dict[str, List[str]]
-    statistics: Dict[str, Any]
+    chunks: dict[ChunkLevel, list[Chunk]]
+    metadata: dict[str, ChunkMetadata]
+    hierarchy: dict[str, list[str]]
+    statistics: dict[str, Any]
 
 
 class ChunkingStrategy(ABC):
     """Abstract base class for chunking strategies."""
-    
+
     @abstractmethod
-    def chunk_document(self, pages: List[Dict[str, Any]]) -> ChunkingResult:
+    def chunk_document(self, pages: list[dict[str, Any]]) -> ChunkingResult:
         """Chunk a document into hierarchical pieces."""
         pass
-    
+
     @abstractmethod
     def get_strategy_name(self) -> str:
         """Get the name of this chunking strategy."""
@@ -72,18 +72,18 @@ class ChunkingStrategy(ABC):
 
 class ChunkingService(ABC):
     """Abstract base class for chunking services."""
-    
+
     @abstractmethod
-    def chunk_document(self, pages: List[Dict[str, Any]]) -> ChunkingResult:
+    def chunk_document(self, pages: list[dict[str, Any]]) -> ChunkingResult:
         """Chunk a document using the configured strategy."""
         pass
-    
+
     @abstractmethod
     def set_strategy(self, strategy: ChunkingStrategy) -> None:
         """Set the chunking strategy to use."""
         pass
-    
+
     @abstractmethod
-    def get_available_strategies(self) -> List[str]:
+    def get_available_strategies(self) -> list[str]:
         """Get list of available chunking strategies."""
         pass

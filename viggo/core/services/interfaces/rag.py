@@ -3,15 +3,15 @@ RAG system interfaces following SOLID principles.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
-from .document_processor import DocumentProcessorFactory
 from .chunking import ChunkingService
+from .document_processor import DocumentProcessorFactory
+from .generation import GenerationService
 from .retrieval import HybridRetriever, QueryContext
-from .generation import GenerationService, GenerationContext
-from .storage import VectorStorage, GraphStorage, CacheStorage
+from .storage import CacheStorage, GraphStorage, VectorStorage
 
 
 class RAGMode(Enum):
@@ -32,8 +32,8 @@ class RAGConfig:
     vector_storage: VectorStorage
     graph_storage: GraphStorage
     cache_storage: CacheStorage
-    additional_config: Dict[str, Any] = None
-    
+    additional_config: dict[str, Any] = None
+
     def __post_init__(self):
         if self.additional_config is None:
             self.additional_config = {}
@@ -44,12 +44,12 @@ class RAGResult:
     """Result of a RAG operation."""
     query: str
     answer: str
-    source_pages: List[int]
+    source_pages: list[int]
     confidence_score: float
     processing_time: float
-    metadata: Dict[str, Any]
-    citations: List[str] = None
-    
+    metadata: dict[str, Any]
+    citations: list[str] = None
+
     def __post_init__(self):
         if self.citations is None:
             self.citations = []
@@ -64,37 +64,37 @@ class IndexingResult:
     relationships_found: int
     processing_time: float
     success: bool
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 class RAGService(ABC):
     """Abstract base class for RAG services."""
-    
+
     @abstractmethod
     def index_document(self, document_path: str) -> IndexingResult:
         """Index a document for retrieval."""
         pass
-    
+
     @abstractmethod
-    def query(self, query: str, context: Optional[QueryContext] = None) -> RAGResult:
+    def query(self, query: str, context: QueryContext | None = None) -> RAGResult:
         """Query the RAG system."""
         pass
-    
+
     @abstractmethod
     def update_document(self, document_path: str) -> IndexingResult:
         """Update an existing document index."""
         pass
-    
+
     @abstractmethod
     def delete_document(self, document_path: str) -> bool:
         """Delete a document from the index."""
         pass
-    
+
     @abstractmethod
-    def get_system_status(self) -> Dict[str, Any]:
+    def get_system_status(self) -> dict[str, Any]:
         """Get the status of the RAG system."""
         pass
-    
+
     @abstractmethod
     def clear_index(self) -> bool:
         """Clear all indexed data."""
@@ -103,17 +103,17 @@ class RAGService(ABC):
 
 class RAGOrchestrator(ABC):
     """Abstract base class for RAG orchestration."""
-    
+
     @abstractmethod
     def create_rag_service(self, config: RAGConfig) -> RAGService:
         """Create a RAG service with the given configuration."""
         pass
-    
+
     @abstractmethod
-    def get_available_components(self) -> Dict[str, List[str]]:
+    def get_available_components(self) -> dict[str, list[str]]:
         """Get available components for RAG configuration."""
         pass
-    
+
     @abstractmethod
     def validate_config(self, config: RAGConfig) -> bool:
         """Validate a RAG configuration."""

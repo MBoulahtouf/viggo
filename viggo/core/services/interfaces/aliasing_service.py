@@ -3,8 +3,8 @@ Aliasing service interfaces following SOLID principles.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Set, Optional, Any
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -20,46 +20,46 @@ class AliasMapping:
 class CanonicalGroup:
     """Represents a group of aliases for a canonical entity."""
     canonical: str
-    aliases: Set[str]
-    labels: Set[str]
-    confidence_scores: Dict[str, float]
-    sources: Dict[str, str]
+    aliases: set[str]
+    labels: set[str]
+    confidence_scores: dict[str, float]
+    sources: dict[str, str]
 
 
 class IAliasingService(ABC):
     """Interface for entity aliasing operations."""
-    
+
     @abstractmethod
     def add_alias_mapping(self, alias: str, canonical: str, confidence: float = 1.0, source: str = "manual") -> None:
         """Add a mapping from alias to canonical name."""
         pass
-    
+
     @abstractmethod
     def resolve_to_canonical(self, entity_name: str) -> str:
         """Resolve an entity name to its canonical form."""
         pass
-    
+
     @abstractmethod
-    def get_all_aliases(self, canonical_name: str) -> Set[str]:
+    def get_all_aliases(self, canonical_name: str) -> set[str]:
         """Get all aliases for a canonical name."""
         pass
-    
+
     @abstractmethod
-    def group_entities_with_aliases(self, entities: List[Dict[str, Any]]) -> List[CanonicalGroup]:
+    def group_entities_with_aliases(self, entities: list[dict[str, Any]]) -> list[CanonicalGroup]:
         """Group entities by canonical name, incorporating alias mappings."""
         pass
-    
+
     @abstractmethod
-    def suggest_aliases(self, entity_name: str, all_entities: List[Dict[str, Any]]) -> List[str]:
+    def suggest_aliases(self, entity_name: str, all_entities: list[dict[str, Any]]) -> list[str]:
         """Suggest potential aliases for an entity based on similarity."""
         pass
-    
+
     @abstractmethod
-    def export_mappings(self) -> Dict[str, Any]:
+    def export_mappings(self) -> dict[str, Any]:
         """Export all alias mappings for persistence."""
         pass
-    
+
     @abstractmethod
-    def import_mappings(self, mappings: Dict[str, Any]) -> None:
+    def import_mappings(self, mappings: dict[str, Any]) -> None:
         """Import alias mappings from a dictionary."""
         pass

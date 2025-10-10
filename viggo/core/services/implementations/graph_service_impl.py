@@ -2,21 +2,24 @@
 Concrete implementation of graph service following SOLID principles.
 """
 
-from neo4j import GraphDatabase
-from typing import List, Dict, Any, Optional, Tuple
-from collections import defaultdict
 import logging
-from dataclasses import dataclass
+from collections import defaultdict
+from typing import Any
+
+from neo4j import GraphDatabase
 
 from viggo.core.services.interfaces.graph_service import (
-    IGraphService, PaginationParams, NodeResult, RelationshipResult, EntityGraphResult, GraphServiceError
+    GraphServiceError,
+    IGraphService,
+    NodeResult,
+    PaginationParams,
 )
-from viggo.core.services.interfaces.aliasing_service import IAliasingService
+
 from .aliasing_service_impl import AliasingService
 
 
 class GraphService(IGraphService):
-    def __init__(self, uri: str, user: str, password: str, clear_on_startup: bool = False, custom_aliases: Optional[Dict[str, str]] = None):
+    def __init__(self, uri: str, user: str, password: str, clear_on_startup: bool = False, custom_aliases: dict[str, str] | None = None):
         """
         Initialize GraphService with Neo4j connection.
         
@@ -38,10 +41,10 @@ class GraphService(IGraphService):
             logging.info("Successfully connected to Neo4j")
         except Exception as e:
             raise GraphServiceError(f"Failed to connect to Neo4j: {e}")
-        
+
         # Initialize aliasing service
         self.aliasing_service = AliasingService(custom_aliases)
-            
+
         if clear_on_startup:
             self.clear_database()
 
@@ -138,7 +141,7 @@ class GraphService(IGraphService):
             )
             session.run(query, source_entity=source_entity, target_entity=target_entity)
 
-    def extract_and_load_graph(self, filename: str, processed_chunks_with_metadata: List[Dict]):
+    def extract_and_load_graph(self, filename: str, processed_chunks_with_metadata: list[dict]):
         doc_filename = self.create_document_node(filename, filename) # Using filename as path for simplicity
 
         for i, chunk_data in enumerate(processed_chunks_with_metadata):
@@ -166,22 +169,22 @@ class GraphService(IGraphService):
 
                 if source_label and target_label:
                     self.create_relationship(
-                        source_entity, 
-                        source_label, 
-                        target_entity, 
-                        target_label, 
+                        source_entity,
+                        source_label,
+                        target_entity,
+                        target_label,
                         rel["type"]
                     )
 
-    def get_related_info_for_entity(self, entity_name: str, entity_label: str = "", excluded_rel_types: List[str] = None, excluded_node_labels: List[str] = None) -> List[Dict[str, Any]]:
+    def get_related_info_for_entity(self, entity_name: str, entity_label: str = "", excluded_rel_types: list[str] = None, excluded_node_labels: list[str] = None) -> list[dict[str, Any]]:
         print(f"[DEBUG] get_related_info_for_entity called with entity_name='{entity_name}', entity_label='{entity_label}'")
         with self.driver.session() as session:
             query_parts = [
-                f"MATCH (e) WHERE toLower(e.name) CONTAINS toLower($entity_name)"
+                "MATCH (e) WHERE toLower(e.name) CONTAINS toLower($entity_name)"
             ]
             if entity_label:
                 query_parts.append(f"AND '{entity_label}' IN labels(e)")
-            
+
             query_parts.append(
                 "OPTIONAL MATCH (e)-[r]-(n) "
             )
@@ -191,7 +194,7 @@ class GraphService(IGraphService):
                 where_clauses.append("type(r) NOT IN $excluded_rel_types")
             if excluded_node_labels:
                 where_clauses.append("all(label IN labels(n) WHERE label NOT IN $excluded_node_labels)")
-            
+
             if where_clauses:
                 query_parts.append("WHERE " + " AND ".join(where_clauses))
 
@@ -203,15 +206,15 @@ class GraphService(IGraphService):
             )
             cypher_query = " ".join(query_parts)
             print(f"[DEBUG] get_related_info_for_entity Cypher query: {cypher_query}")
-            
+
             params = {
                 "entity_name": entity_name,
                 "excluded_rel_types": excluded_rel_types,
                 "excluded_node_labels": excluded_node_labels
             }
-            
+
             result = session.run(cypher_query, params)
-            
+
             structured_info = []
             for record in result:
                 info = {
@@ -235,7 +238,7 @@ class GraphService(IGraphService):
             print(f"[DEBUG] get_related_info_for_entity result: {structured_info}")
             return structured_info
 
-    def get_entity_graph_data(self, entity_name: str, entity_label: str = "") -> Dict[str, Any]:
+    def get_entity_graph_data(self, entity_name: str, entity_label: str = "") -> dict[str, Any]:
         print(f"[DEBUG] get_entity_graph_data called with entity_name='{entity_name}', entity_label='{entity_label}'")
         with self.driver.session() as session:
             entity_result = None
@@ -296,7 +299,7 @@ class GraphService(IGraphService):
             print(f"[DEBUG] Entity data returned: {entity_data}")
             return entity_data
 
-    def list_all_nodes(self, label: Optional[str] = None, pagination: Optional[PaginationParams] = None) -> List[NodeResult]:
+    def list_all_nodes(self, label: str | None = None, pagination: PaginationParams | None = None) -> list[NodeResult]:
         """
         List all nodes with optional filtering and pagination.
         
@@ -312,9 +315,9 @@ class GraphService(IGraphService):
         """
         if pagination is None:
             pagination = PaginationParams()
-            
+
         allowed_labels = {"Character", "Location", "Organization"}
-        
+
         try:
             with self.driver.session() as session:
                 if label and label in allowed_labels:
@@ -331,7 +334,7 @@ class GraphService(IGraphService):
                         "SKIP $offset LIMIT $limit"
                     )
                     result = session.run(query, allowed_labels=list(allowed_labels), offset=pagination.offset, limit=pagination.limit)
-                
+
                 return [
                     NodeResult(
                         name=record["name"],
@@ -343,7 +346,7 @@ class GraphService(IGraphService):
         except Exception as e:
             raise GraphServiceError(f"Failed to list nodes: {e}")
 
-    def grouped_nodes(self, label: Optional[str] = None) -> List[Dict[str, Any]]:
+    def grouped_nodes(self, label: str | None = None) -> list[dict[str, Any]]:
         """
         Group nodes by canonical name (case-insensitive) showing all aliases and labels.
         
@@ -355,7 +358,7 @@ class GraphService(IGraphService):
         """
         nodes = self.list_all_nodes(label=label)
         grouped = defaultdict(lambda: {"canonical": None, "aliases": set(), "labels": set()})
-        
+
         for node in nodes:
             if not node.name:
                 continue
@@ -363,7 +366,7 @@ class GraphService(IGraphService):
             grouped[canonical]["canonical"] = canonical
             grouped[canonical]["aliases"].add(node.name)
             grouped[canonical]["labels"].update(node.labels)
-            
+
         # Convert sets to lists for JSON serialization
         result = [
             {
@@ -374,7 +377,7 @@ class GraphService(IGraphService):
             for group in grouped.values()
         ]
         return result
-    
+
     def add_alias_mapping(self, alias: str, canonical: str, confidence: float = 1.0, source: str = "manual") -> None:
         """
         Add an alias mapping to the aliasing service.
@@ -386,7 +389,7 @@ class GraphService(IGraphService):
             source: Source of the mapping
         """
         self.aliasing_service.add_alias_mapping(alias, canonical, confidence, source)
-    
+
     def resolve_entity_name(self, entity_name: str) -> str:
         """
         Resolve an entity name to its canonical form.
@@ -398,8 +401,8 @@ class GraphService(IGraphService):
             The canonical name
         """
         return self.aliasing_service.resolve_to_canonical(entity_name)
-    
-    def get_entity_with_aliases(self, entity_name: str, entity_label: Optional[str] = None) -> Dict[str, Any]:
+
+    def get_entity_with_aliases(self, entity_name: str, entity_label: str | None = None) -> dict[str, Any]:
         """
         Get entity data including all its aliases.
         
@@ -411,24 +414,24 @@ class GraphService(IGraphService):
             Dictionary containing entity data and aliases
         """
         canonical_name = self.resolve_entity_name(entity_name)
-        
+
         # Get the main entity data
         entity_data = self.get_related_info_for_entity(canonical_name, entity_label)
-        
+
         if not entity_data:
             return {}
-        
+
         # Get all aliases for this canonical name
         all_aliases = self.aliasing_service.get_all_aliases(canonical_name)
-        
+
         return {
             "canonical_name": canonical_name,
             "entity_data": entity_data,
             "aliases": list(all_aliases),
             "alias_count": len(all_aliases)
         }
-    
-    def suggest_aliases_for_entity(self, entity_name: str) -> List[str]:
+
+    def suggest_aliases_for_entity(self, entity_name: str) -> list[str]:
         """
         Suggest potential aliases for an entity.
         
@@ -441,10 +444,10 @@ class GraphService(IGraphService):
         # Get all entities for suggestion
         all_entities = self.list_all_nodes()
         entity_dicts = [{"name": node.name, "labels": node.labels} for node in all_entities]
-        
+
         return self.aliasing_service.suggest_aliases(entity_name, entity_dicts)
-    
-    def get_entity_details(self, entity_name: str, entity_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+
+    def get_entity_details(self, entity_name: str, entity_type: str | None = None) -> dict[str, Any] | None:
         """
         Get detailed information about a specific entity.
         
@@ -457,7 +460,7 @@ class GraphService(IGraphService):
         """
         try:
             canonical_name = self.resolve_entity_name(entity_name)
-            
+
             # Build query based on whether we have entity type
             if entity_type:
                 query = """
@@ -472,11 +475,11 @@ class GraphService(IGraphService):
                 RETURN n.name as name, labels(n) as labels, properties(n) as properties
                 """
                 params = {"name": canonical_name}
-            
+
             with self.driver.session() as session:
                 result = session.run(query, params)
                 record = result.single()
-                
+
                 if record:
                     return {
                         "name": record["name"],
@@ -484,12 +487,12 @@ class GraphService(IGraphService):
                         "properties": dict(record["properties"])
                     }
                 return None
-                
+
         except Exception as e:
             logging.error(f"Error getting entity details for {entity_name}: {e}")
             return None
-    
-    def find_relationships(self, query: str) -> List[Dict[str, Any]]:
+
+    def find_relationships(self, query: str) -> list[dict[str, Any]]:
         """
         Find relationships based on a query string.
         
@@ -502,7 +505,7 @@ class GraphService(IGraphService):
         try:
             # Extract potential entity names from query
             query_lower = query.lower()
-            
+
             # Simple relationship search - look for connections between entities
             cypher_query = """
             MATCH (a)-[r]->(b)
@@ -513,11 +516,11 @@ class GraphService(IGraphService):
                    properties(r) as rel_properties, labels(a) as source_labels, labels(b) as target_labels
             LIMIT 10
             """
-            
+
             with self.driver.session() as session:
                 result = session.run(cypher_query, {"query": query_lower})
                 relationships = []
-                
+
                 for record in result:
                     relationships.append({
                         "source": record["source"],
@@ -528,9 +531,9 @@ class GraphService(IGraphService):
                         "target_labels": record["target_labels"],
                         "description": f"{record['source']} {record['relationship_type']} {record['target']}"
                     })
-                
+
                 return relationships
-                
+
         except Exception as e:
             logging.error(f"Error finding relationships for query '{query}': {e}")
             return []

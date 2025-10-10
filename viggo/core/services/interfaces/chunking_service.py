@@ -3,9 +3,8 @@ Chunking service interfaces following SOLID principles.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
 
 
 class ChunkLevel(Enum):
@@ -33,19 +32,19 @@ class ChunkMetadata:
     """Metadata for a chunk with hierarchical information."""
     level: ChunkLevel
     chunk_type: ChunkType
-    parent_id: Optional[str] = None
-    children_ids: List[str] = None
+    parent_id: str | None = None
+    children_ids: list[str] = None
     word_count: int = 0
     char_count: int = 0
     page_number: int = 0
     chapter_title: str = ""
     section_title: str = ""
-    entities: List[Dict] = None
-    relationships: List[Dict] = None
+    entities: list[dict] = None
+    relationships: list[dict] = None
     content_type: str = "story_content"
     lore_significance: float = 0.0
     overlap_ratio: float = 0.0
-    
+
     def __post_init__(self):
         if self.children_ids is None:
             self.children_ids = []
@@ -73,33 +72,33 @@ class ChunkingConfig:
 
 class IHybridChunkingService(ABC):
     """Interface for hybrid chunking operations."""
-    
+
     @abstractmethod
-    def chunk_document_hierarchical(self, document_store: List[Dict]) -> Dict[str, List[Dict]]:
+    def chunk_document_hierarchical(self, document_store: list[dict]) -> dict[str, list[dict]]:
         """Main entry point for hierarchical document chunking."""
         pass
-    
+
     @abstractmethod
-    def get_chunks_by_level(self, level: ChunkLevel) -> List[Dict]:
+    def get_chunks_by_level(self, level: ChunkLevel) -> list[dict]:
         """Get chunks at a specific hierarchical level."""
         pass
-    
+
     @abstractmethod
-    def get_chunk_children(self, chunk_id: str) -> List[Dict]:
+    def get_chunk_children(self, chunk_id: str) -> list[dict]:
         """Get child chunks of a specific chunk."""
         pass
-    
+
     @abstractmethod
-    def get_chunk_parent(self, chunk_id: str) -> Optional[ChunkMetadata]:
+    def get_chunk_parent(self, chunk_id: str) -> ChunkMetadata | None:
         """Get parent chunk of a specific chunk."""
         pass
-    
+
     @abstractmethod
-    def get_critical_lore_chunks(self, threshold: float = 0.7) -> List[Dict]:
+    def get_critical_lore_chunks(self, threshold: float = 0.7) -> list[dict]:
         """Get chunks with high lore significance."""
         pass
-    
+
     @abstractmethod
-    def get_chunking_summary(self) -> Dict:
+    def get_chunking_summary(self) -> dict:
         """Get a summary of the chunking process."""
         pass
