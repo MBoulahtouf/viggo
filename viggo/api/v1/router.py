@@ -1,6 +1,7 @@
 # viggo/api/v1/router.py
 from fastapi import APIRouter
-from viggo.api.v1.endpoints import graph, rag, content, health
+
+from viggo.api.v1.endpoints import content, graph, health, rag
 
 api_router = APIRouter()
 

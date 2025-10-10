@@ -1,9 +1,7 @@
 # viggo/main.py
 from fastapi import FastAPI
+
 from viggo.api.v1.router import api_router
-import mlflow
-import wandb
-from viggo.core.config import settings
 
 app = FastAPI(
     title="Viggo API | Knowledge Explorer",

@@ -1,8 +1,8 @@
-from fastapi import Depends
-from viggo.core.services import get_rag_service
-from viggo.core.services.interfaces.rag import RAGService as IRAGService
-from viggo.core.services.implementations.graph_service_impl import GraphService
 from viggo.core.config import settings
+from viggo.core.services import get_rag_service
+from viggo.core.services.implementations.graph_service_impl import GraphService
+from viggo.core.services.interfaces.rag import RAGService as IRAGService
+
 
 # SOLID-compliant dependencies
 def get_solid_rag_service() -> IRAGService:

@@ -2,27 +2,29 @@
 Content processing API endpoints using the new SOLID architecture.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File
-from typing import List, Optional
 import logging
 import time
-import os
-from pathlib import Path
 
-from viggo.models.content_models import (
-    ChunkingRequest, ChunkingResponse,
-    ContentFilterRequest, ContentFilterResponse,
-    EntityExtractionRequest, EntityExtractionResponse,
-    DocumentProcessingRequest, DocumentProcessingResponse,
-    ChunkModel, ChunkMetadata
-)
-from viggo.models.api_models import (
-    SuccessResponse, ErrorResponse, PaginationParams, PaginatedResponse
-)
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from viggo.core.services import (
-    ContentFilterService, EnhancedEntityExtractor, HybridChunkingService
+    ContentFilterService,
+    EnhancedEntityExtractor,
+    HybridChunkingService,
 )
-from viggo.core.config import settings
+from viggo.models.api_models import PaginatedResponse, PaginationParams, SuccessResponse
+from viggo.models.content_models import (
+    ChunkingRequest,
+    ChunkingResponse,
+    ChunkMetadata,
+    ChunkModel,
+    ContentFilterRequest,
+    ContentFilterResponse,
+    DocumentProcessingRequest,
+    DocumentProcessingResponse,
+    EntityExtractionRequest,
+    EntityExtractionResponse,
+)
 
 router = APIRouter(prefix="/content", tags=["Content Processing"])
 
@@ -39,15 +41,15 @@ async def chunk_document(
     with configurable chunking parameters.
     """
     start_time = time.time()
-    
+
     try:
         logging.info(f"Starting document chunking: {request.document_id}")
-        
+
         # For now, we'll use a simplified approach
         # In a real implementation, this would use the actual document processing pipeline
-        
+
         processing_time = time.time() - start_time
-        
+
         response = ChunkingResponse(
             document_id=request.document_id,
             chunks_created=100,  # Mock data
@@ -72,12 +74,12 @@ async def chunk_document(
                 "hierarchical_enabled": request.enable_hierarchical
             }
         )
-        
+
         return SuccessResponse(
             message="Document chunked successfully",
             data=response
         )
-        
+
     except Exception as e:
         logging.error(f"Document chunking failed: {str(e)}")
         raise HTTPException(
@@ -99,18 +101,18 @@ async def filter_content(
     """
     try:
         logging.info(f"Filtering content from page {request.page_number}")
-        
+
         # Use the content filter service
         should_index = filter_service.should_index_content(
-            request.content, 
+            request.content,
             request.page_number
         )
-        
+
         content_type = filter_service.classify_content_type(
-            request.content, 
+            request.content,
             request.page_number
         )
-        
+
         response = ContentFilterResponse(
             should_index=should_index,
             content_type=content_type,
@@ -124,12 +126,12 @@ async def filter_content(
                 "filter_bibliography": request.filter_bibliography
             }
         )
-        
+
         return SuccessResponse(
             message="Content filtered successfully",
             data=response
         )
-        
+
     except Exception as e:
         logging.error(f"Content filtering failed: {str(e)}")
         raise HTTPException(
@@ -150,10 +152,10 @@ async def extract_entities(
     deduplication and disambiguation.
     """
     start_time = time.time()
-    
+
     try:
         logging.info(f"Extracting entities from page {request.page_number}")
-        
+
         # Check if content should be processed
         if not extractor.should_process_content(request.content, request.page_number):
             return SuccessResponse(
@@ -169,21 +171,21 @@ async def extract_entities(
                     metadata={"reason": "Content filtered out"}
                 )
             )
-        
+
         # Extract entities
         entities = extractor.extract_entities_enhanced(
-            request.content, 
+            request.content,
             request.page_number
         )
-        
+
         processing_time = time.time() - start_time
-        
+
         # Count entities by type
         entity_types = {}
         for entity in entities:
             entity_type = entity.get("label", "UNKNOWN")
             entity_types[entity_type] = entity_types.get(entity_type, 0) + 1
-        
+
         response = EntityExtractionResponse(
             entities=entities,
             total_entities=len(entities),
@@ -199,12 +201,12 @@ async def extract_entities(
                 "max_entities": request.max_entities
             }
         )
-        
+
         return SuccessResponse(
             message="Entities extracted successfully",
             data=response
         )
-        
+
     except Exception as e:
         logging.error(f"Entity extraction failed: {str(e)}")
         raise HTTPException(
@@ -227,15 +229,15 @@ async def process_document(
     in a coordinated manner.
     """
     start_time = time.time()
-    
+
     try:
         logging.info(f"Starting full document processing: {request.document_id}")
-        
+
         # This would coordinate all the processing steps
         # For now, we'll return mock data
-        
+
         processing_time = time.time() - start_time
-        
+
         response = DocumentProcessingResponse(
             document_id=request.document_id,
             processing_status="completed",
@@ -250,12 +252,12 @@ async def process_document(
                 "processing_options": request.processing_options
             }
         )
-        
+
         return SuccessResponse(
             message="Document processed successfully",
             data=response
         )
-        
+
     except Exception as e:
         logging.error(f"Document processing failed: {str(e)}")
         raise HTTPException(
@@ -267,8 +269,8 @@ async def process_document(
 @router.get("/chunks", response_model=SuccessResponse[PaginatedResponse[ChunkModel]])
 async def list_chunks(
     pagination: PaginationParams = Depends(),
-    chunk_level: Optional[str] = None,
-    chunk_type: Optional[str] = None,
+    chunk_level: str | None = None,
+    chunk_type: str | None = None,
     chunking_service: HybridChunkingService = Depends(lambda: HybridChunkingService())
 ):
     """
@@ -280,7 +282,7 @@ async def list_chunks(
     try:
         # This would retrieve actual chunks from the chunking service
         # For now, we'll return mock data
-        
+
         mock_chunks = [
             ChunkModel(
                 chunk_id=f"chunk_{i}",
@@ -300,9 +302,9 @@ async def list_chunks(
             )
             for i in range(pagination.offset, pagination.offset + pagination.page_size)
         ]
-        
+
         total_items = 1000  # Mock total
-        
+
         paginated_response = PaginatedResponse(
             items=mock_chunks,
             pagination={
@@ -318,12 +320,12 @@ async def list_chunks(
                 "chunk_type_filter": chunk_type
             }
         )
-        
+
         return SuccessResponse(
             message="Chunks retrieved successfully",
             data=paginated_response
         )
-        
+
     except Exception as e:
         logging.error(f"Failed to list chunks: {str(e)}")
         raise HTTPException(

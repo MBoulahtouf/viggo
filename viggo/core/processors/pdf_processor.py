@@ -1,6 +1,7 @@
 # viggo/core/processors/pdf_processor.py
-from typing import List, Dict
+
 from pypdf import PdfReader
+
 from .base import DocumentProcessor
 
 
@@ -8,12 +9,12 @@ class PDFProcessor(DocumentProcessor):
     """
     Processor for PDF documents using pypdf library.
     """
-    
-    def _get_supported_extensions(self) -> List[str]:
+
+    def _get_supported_extensions(self) -> list[str]:
         """Return list of supported PDF file extensions."""
         return [".pdf"]
-    
-    def extract_text(self, file_path: str) -> List[Dict]:
+
+    def extract_text(self, file_path: str) -> list[dict]:
         """
         Extract text content from a PDF file.
         
@@ -31,14 +32,14 @@ class PDFProcessor(DocumentProcessor):
             reader = PdfReader(file_path)
             pages_data = []
             total_pages = len(reader.pages)
-            
+
             print(f"[DEBUG] PDF has {total_pages} total pages")
-            
+
             for i, page in enumerate(reader.pages):
                 text = page.extract_text()
                 word_count = len(text.split()) if text else 0
                 print(f"[DEBUG] Page {i+1}: {word_count} words, content length: {len(text) if text else 0}")
-                
+
                 if text and text.strip():  # Only include pages with actual content
                     pages_data.append({
                         "page": i + 1,
@@ -47,21 +48,21 @@ class PDFProcessor(DocumentProcessor):
                     print(f"[DEBUG] Extracted text from PDF page {i+1}: {text[:200]}...")
                 else:
                     print(f"[DEBUG] Skipping page {i+1} - no readable content")
-            
+
             print(f"[DEBUG] Extracted {len(pages_data)} pages with content from {total_pages} total pages")
-            
+
             if not pages_data:
                 raise ValueError("No readable text content found in PDF")
-            
+
             return pages_data
-            
+
         except Exception as e:
             if "File not found" in str(e) or "No such file" in str(e):
                 raise FileNotFoundError(f"PDF file not found: {file_path}")
             else:
                 raise ValueError(f"Error reading PDF file {file_path}: {str(e)}")
-    
-    def get_pdf_info(self, file_path: str) -> Dict:
+
+    def get_pdf_info(self, file_path: str) -> dict:
         """
         Get additional PDF-specific information.
         
@@ -75,9 +76,9 @@ class PDFProcessor(DocumentProcessor):
             reader = PdfReader(file_path)
             metadata = reader.metadata
             total_pages = len(reader.pages)
-            
+
             print(f"[DEBUG] get_pdf_info: PDF has {total_pages} total pages")
-            
+
             result = {
                 **self.get_file_info(file_path),
                 "num_pages": total_pages,
@@ -89,9 +90,9 @@ class PDFProcessor(DocumentProcessor):
                 "creation_date": str(metadata.get("/CreationDate", "")) if metadata else "",
                 "modification_date": str(metadata.get("/ModDate", "")) if metadata else ""
             }
-            
+
             print(f"[DEBUG] get_pdf_info returning: {result}")
             return result
-        except Exception as e:
+        except Exception:
             # Return basic file info if PDF metadata cannot be read
             return self.get_file_info(file_path)

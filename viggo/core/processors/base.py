@@ -1,7 +1,6 @@
 # viggo/core/processors/base.py
-from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
 import os
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 
@@ -12,17 +11,17 @@ class DocumentProcessor(ABC):
     Each document format (PDF, EPUB, DOCX, etc.) should have its own processor
     that implements this interface.
     """
-    
+
     def __init__(self):
         self.supported_extensions = self._get_supported_extensions()
-    
+
     @abstractmethod
-    def _get_supported_extensions(self) -> List[str]:
+    def _get_supported_extensions(self) -> list[str]:
         """Return list of file extensions this processor supports."""
         pass
-    
+
     @abstractmethod
-    def extract_text(self, file_path: str) -> List[Dict]:
+    def extract_text(self, file_path: str) -> list[dict]:
         """
         Extract text content from a document file.
         
@@ -38,7 +37,7 @@ class DocumentProcessor(ABC):
             ValueError: If file format is not supported or corrupted
         """
         pass
-    
+
     def validate_file(self, file_path: str) -> bool:
         """
         Validate that the file exists and has a supported extension.
@@ -51,11 +50,11 @@ class DocumentProcessor(ABC):
         """
         if not os.path.exists(file_path):
             return False
-        
+
         file_extension = Path(file_path).suffix.lower()
         return file_extension in self.supported_extensions
-    
-    def get_file_info(self, file_path: str) -> Dict:
+
+    def get_file_info(self, file_path: str) -> dict:
         """
         Get basic information about the file.
         
@@ -67,7 +66,7 @@ class DocumentProcessor(ABC):
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-        
+
         file_path_obj = Path(file_path)
         return {
             "filename": file_path_obj.name,
@@ -75,8 +74,8 @@ class DocumentProcessor(ABC):
             "size_bytes": os.path.getsize(file_path),
             "size_mb": round(os.path.getsize(file_path) / (1024 * 1024), 2)
         }
-    
-    def process_document(self, file_path: str) -> List[Dict]:
+
+    def process_document(self, file_path: str) -> list[dict]:
         """
         Main entry point for processing a document.
         Validates the file and extracts text content.
@@ -97,5 +96,5 @@ class DocumentProcessor(ABC):
                 f"Unsupported file format: {file_extension}. "
                 f"Supported formats: {', '.join(self.supported_extensions)}"
             )
-        
+
         return self.extract_text(file_path)

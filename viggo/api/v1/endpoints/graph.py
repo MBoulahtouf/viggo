@@ -1,8 +1,16 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Dict, Any, List, Optional
-from viggo.core.services.implementations.graph_service_impl import GraphService, PaginationParams
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from viggo.core.services.implementations.graph_service_impl import (
+    GraphService,
+    PaginationParams,
+)
 from viggo.dependencies import get_graph_service
-from viggo.models.schemas import NodeListResponse, GroupedNodeListResponse, EntityGraphResponse
+from viggo.models.schemas import (
+    EntityGraphResponse,
+    GroupedNodeListResponse,
+    NodeListResponse,
+)
 
 router = APIRouter()
 
@@ -10,17 +18,17 @@ router = APIRouter()
 async def get_entity_graph_data(
     entity_name: str,
     entity_label: str = "", # Optional: to specify the type of entity (e.g., Character, Location)
-    excluded_rel_types: List[str] = Query(None), # Optional: list of relationship types to exclude
-    excluded_node_labels: List[str] = Query(None), # Optional: list of node labels to exclude
+    excluded_rel_types: list[str] = Query(None), # Optional: list of relationship types to exclude
+    excluded_node_labels: list[str] = Query(None), # Optional: list of node labels to exclude
     graph_service: GraphService = Depends(get_graph_service)
 ) -> EntityGraphResponse:
     """
     Retrieves graph data for a given entity, including its properties and direct relationships.
     """
     graph_data = graph_service.get_related_info_for_entity(
-        entity_name, 
-        entity_label, 
-        excluded_rel_types=excluded_rel_types, 
+        entity_name,
+        entity_label,
+        excluded_rel_types=excluded_rel_types,
         excluded_node_labels=excluded_node_labels
     )
     if not graph_data:
@@ -29,7 +37,7 @@ async def get_entity_graph_data(
 
 @router.get("/nodes", response_model=NodeListResponse)
 def list_all_nodes(
-    label: Optional[str] = Query(None, description="Filter by label: Character, Location, Organization"),
+    label: str | None = Query(None, description="Filter by label: Character, Location, Organization"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of nodes to return"),
     offset: int = Query(0, ge=0, description="Number of nodes to skip"),
     graph_service: GraphService = Depends(get_graph_service)
@@ -49,7 +57,7 @@ def list_all_nodes(
 
 @router.get("/grouped_nodes", response_model=GroupedNodeListResponse)
 def grouped_nodes(
-    label: Optional[str] = Query(None, description="Filter by label: Character, Location, Organization"), 
+    label: str | None = Query(None, description="Filter by label: Character, Location, Organization"),
     graph_service: GraphService = Depends(get_graph_service)
 ):
     """List all nodes grouped by canonical name, showing all aliases and labels."""
@@ -62,7 +70,7 @@ def grouped_nodes(
 @router.get("/entity/{entity_name}/aliases")
 def get_entity_with_aliases(
     entity_name: str,
-    entity_label: Optional[str] = Query(None, description="Filter by label: Character, Location, Organization"),
+    entity_label: str | None = Query(None, description="Filter by label: Character, Location, Organization"),
     graph_service: GraphService = Depends(get_graph_service)
 ):
     """Get entity data including all its aliases and canonical name."""

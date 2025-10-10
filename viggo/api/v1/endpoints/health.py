@@ -2,17 +2,19 @@
 Health check and system information endpoints.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
 import logging
 import time
 from datetime import datetime
 
-from viggo.models.api_models import (
-    HealthCheckResponse, VersionResponse, SuccessResponse
-)
-from viggo.core.services.rag_factory import get_rag_service
-from viggo.dependencies import get_solid_rag_service
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from viggo.core.services.interfaces.rag import RAGService as IRAGService
+from viggo.dependencies import get_solid_rag_service
+from viggo.models.api_models import (
+    HealthCheckResponse,
+    SuccessResponse,
+    VersionResponse,
+)
 
 router = APIRouter(prefix="/health", tags=["Health & System Info"])
 
@@ -33,10 +35,10 @@ async def health_check(
     try:
         # Get system status from RAG service
         system_status = rag_service.get_system_status()
-        
+
         # Calculate uptime
         uptime = time.time() - _startup_time
-        
+
         # Check component health
         components = {
             "rag_system": {
@@ -56,7 +58,7 @@ async def health_check(
                 "details": system_status.get("cache_storage", {})
             }
         }
-        
+
         # Check dependencies
         dependencies = {
             "neo4j": {
@@ -72,14 +74,14 @@ async def health_check(
                 "details": {"endpoint": "configured"}
             }
         }
-        
+
         # Determine overall status
         overall_status = "healthy"
         for component in components.values():
             if component["status"] != "healthy":
                 overall_status = "degraded"
                 break
-        
+
         health_response = HealthCheckResponse(
             status=overall_status,
             timestamp=datetime.now(),
@@ -88,12 +90,12 @@ async def health_check(
             components=components,
             dependencies=dependencies
         )
-        
+
         return SuccessResponse(
             message="Health check completed",
             data=health_response
         )
-        
+
     except Exception as e:
         logging.error(f"Health check failed: {str(e)}")
         raise HTTPException(
@@ -113,9 +115,9 @@ async def readiness_check(
     """
     try:
         system_status = rag_service.get_system_status()
-        
+
         is_ready = system_status.get("vector_storage", {}).get("available", False)
-        
+
         if is_ready:
             return SuccessResponse(
                 message="System is ready",
@@ -126,7 +128,7 @@ async def readiness_check(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="System is not ready"
             )
-            
+
     except Exception as e:
         logging.error(f"Readiness check failed: {str(e)}")
         raise HTTPException(
@@ -175,12 +177,12 @@ async def get_version():
                 "redis": "5.0.1"
             }
         )
-        
+
         return SuccessResponse(
             message="Version information retrieved",
             data=version_response
         )
-        
+
     except Exception as e:
         logging.error(f"Failed to get version info: {str(e)}")
         raise HTTPException(
@@ -201,7 +203,7 @@ async def get_metrics(
     """
     try:
         system_status = rag_service.get_system_status()
-        
+
         metrics = {
             "system": {
                 "uptime": time.time() - _startup_time,
@@ -224,12 +226,12 @@ async def get_metrics(
                 "disk_usage": 0  # Would come from actual system metrics
             }
         }
-        
+
         return SuccessResponse(
             message="Metrics retrieved successfully",
             data=metrics
         )
-        
+
     except Exception as e:
         logging.error(f"Failed to get metrics: {str(e)}")
         raise HTTPException(
