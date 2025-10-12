@@ -5,7 +5,7 @@ Get Viggo up and running in 5 minutes!
 ## Prerequisites
 
 - Python 3.11 or 3.12
-- Poetry
+- Poetry or uv (uv recommended for faster setup)
 - Docker (for Neo4j)
 
 ## 1. Clone and Install
@@ -13,6 +13,16 @@ Get Viggo up and running in 5 minutes!
 ```bash
 git clone <repository-url>
 cd viggo
+```
+
+**Option A: Using uv (Recommended - Faster)**
+```bash
+uv sync --all-extras
+uv run python -m spacy download en_core_web_sm
+```
+
+**Option B: Using Poetry**
+```bash
 poetry install
 poetry run python -m spacy download en_core_web_sm
 ```
@@ -43,6 +53,12 @@ NEO4J_PASSWORD=password123
 
 ## 4. Start the Server
 
+**Using uv:**
+```bash
+uv run uvicorn viggo.main:app --reload
+```
+
+**Using Poetry:**
 ```bash
 poetry run uvicorn viggo.main:app --reload
 ```
@@ -82,13 +98,20 @@ Open your browser to:
 - Try Neo4j Browser: http://localhost:7474
 
 **Missing spaCy model:**
+
+**Using uv:**
+```bash
+uv run python -m spacy download en_core_web_sm
+```
+
+**Using Poetry:**
 ```bash
 poetry run python -m spacy download en_core_web_sm
 ```
 
 **Import errors:**
 - Ensure you're in the project root
-- Run `poetry install` again
+- Run `uv sync --all-extras` or `poetry install` again
 
 ## Next Steps
 

@@ -17,7 +17,7 @@ This guide provides comprehensive information for developers working on Viggo.
 ### Prerequisites
 
 - Python 3.11 or 3.12
-- Poetry (for dependency management)
+- Poetry or uv (for dependency management - uv recommended for speed)
 - Neo4j database (local or remote)
 - Groq API key
 
@@ -30,11 +30,25 @@ This guide provides comprehensive information for developers working on Viggo.
    ```
 
 2. **Install dependencies:**
+
+   **Option A: Using uv (Recommended - Faster)**
+   ```bash
+   uv sync --all-extras
+   ```
+
+   **Option B: Using Poetry**
    ```bash
    poetry install
    ```
 
 3. **Download spaCy model:**
+
+   **Using uv:**
+   ```bash
+   uv run python -m spacy download en_core_web_sm
+   ```
+
+   **Using Poetry:**
    ```bash
    poetry run python -m spacy download en_core_web_sm
    ```
@@ -76,6 +90,12 @@ DATA_DIR=/absolute/path/to/data
 
 ### Development Server
 
+**Using uv:**
+```bash
+uv run uvicorn viggo.main:app --reload
+```
+
+**Using Poetry:**
 ```bash
 poetry run uvicorn viggo.main:app --reload
 ```
@@ -112,6 +132,22 @@ The API will be available at `http://127.0.0.1:8000`
 
 ### Running Tests
 
+**Using uv:**
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=viggo --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_entity_utils.py
+
+# Run with verbose output
+uv run pytest -v
+```
+
+**Using Poetry:**
 ```bash
 # Run all tests
 poetry run pytest
@@ -160,10 +196,63 @@ Follow these guidelines:
        # Test error handling
    ```
 
+## Dependency Management
+
+Viggo uses a hybrid Poetry + uv approach for optimal performance and reproducibility:
+
+### Poetry vs uv Usage
+
+- **Poetry**: Used for lock file management and reproducibility
+- **uv**: Used for fast dependency installation (CI and local development)
+
+### Workflow
+
+1. **Adding Dependencies:**
+   - Edit `pyproject.toml` directly
+   - Run `poetry lock` to update lock file
+   - Use `uv sync` for fast installation
+
+2. **Updating Dependencies:**
+   ```bash
+   # Update lock file with Poetry
+   poetry lock --no-update
+   
+   # Install with uv for speed
+   uv sync --all-extras
+   ```
+
+3. **Local Development:**
+   - Use `uv run <command>` for faster execution
+   - Use `poetry run <command>` if you prefer Poetry
+   - Both respect the same lock file
+
+### Benefits of Hybrid Approach
+
+- **Speed**: uv is 2-3x faster than Poetry for dependency resolution
+- **Reproducibility**: Poetry lock file ensures consistent builds
+- **Compatibility**: Works with existing Poetry workflows
+- **CI Performance**: Faster CI builds with uv
+
 ## Code Quality
 
 ### Linting and Formatting
 
+**Using uv:**
+```bash
+# Check code style
+uv run ruff check .
+
+# Fix auto-fixable issues
+uv run ruff check . --fix
+
+# Format code
+uv run ruff format .
+
+# Type checking
+uv run mypy viggo/ --ignore-missing-imports
+```
+
+**Using Poetry:**
 ```bash
 # Check code style
 poetry run ruff check .
@@ -220,6 +309,13 @@ poetry run pre-commit run --all-files
 **Error:** `OSError: [E050] Can't find model 'en_core_web_sm'`
 
 **Solution:**
+
+**Using uv:**
+```bash
+uv run python -m spacy download en_core_web_sm
+```
+
+**Using Poetry:**
 ```bash
 poetry run python -m spacy download en_core_web_sm
 ```
@@ -248,7 +344,7 @@ poetry run python -m spacy download en_core_web_sm
 
 **Solutions:**
 - Ensure you're in the project root directory
-- Run `poetry install` to install dependencies
+- Run `uv sync --all-extras` or `poetry install` to install dependencies
 - Check Python path configuration
 
 ### Debug Mode
@@ -320,6 +416,14 @@ viggo/
    ```
 
 2. **Make changes and test:**
+
+   **Using uv:**
+   ```bash
+   uv run pytest
+   uv run ruff check .
+   ```
+
+   **Using Poetry:**
    ```bash
    poetry run pytest
    poetry run ruff check .

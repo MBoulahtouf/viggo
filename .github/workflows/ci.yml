@@ -10,94 +10,76 @@ jobs:
   multi-agent-tests:
     runs-on: ubuntu-latest
     name: Multi-Agent Framework Tests
+    timeout-minutes: 15
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v4
+    - name: Setup uv with Caching
+      uses: ./.github/actions/setup-uv
       with:
         python-version: '3.12'
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    
-    - name: Install dependencies
-      run: poetry install --no-interaction
+        uv-version: 'latest'
+        install-dev-deps: 'false'
     
     - name: Test Multi-Agent Core (No Dependencies)
-      run: poetry run python tests/test_multi_agent_core.py
+      run: uv run python tests/test_multi_agent_core.py
     
     - name: Test Multi-Agent Standalone
-      run: poetry run python tests/test_multi_agent_standalone.py
+      run: uv run python tests/test_multi_agent_standalone.py
     
     - name: Test Multi-Agent Framework (If Available)
-      run: poetry run python tests/test_multi_agent_framework.py
+      run: uv run python tests/test_multi_agent_framework.py
       continue-on-error: true
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: [3.11, 3.12]
+      fail-fast: false
 
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+    - name: Setup uv with Caching
+      uses: ./.github/actions/setup-uv
       with:
         python-version: ${{ matrix.python-version }}
+        uv-version: 'latest'
+        install-dev-deps: 'true'
     
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    
-    - name: Load cached venv
-      id: cached-poetry-dependencies
+    - name: Cache spaCy model
       uses: actions/cache@v3
       with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
-    
-    - name: Install dependencies
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: poetry install --no-interaction --no-root
-    
-    - name: Install project
-      run: poetry install --no-interaction
+        path: ~/.local/share/spacy
+        key: spacy-${{ runner.os }}-${{ matrix.python-version }}-en_core_web_sm
     
     - name: Download spaCy model
-      run: poetry run python -m spacy download en_core_web_sm
+      run: uv run python -m spacy download en_core_web_sm
     
     - name: Lint with ruff
-      run: poetry run ruff check .
+      run: uv run ruff check .
     
     - name: Format check with ruff
-      run: poetry run ruff format --check .
+      run: uv run ruff format --check .
     
     - name: Type check with mypy
-      run: poetry run mypy viggo/ --ignore-missing-imports
+      run: uv run mypy viggo/ --ignore-missing-imports
       continue-on-error: true  # Allow type checking to fail without failing the build
     
     - name: Test Multi-Agent Framework (Core)
-      run: poetry run python tests/test_multi_agent_core.py
+      run: uv run python tests/test_multi_agent_core.py
     
     - name: Test Multi-Agent Framework (Standalone)
-      run: poetry run python tests/test_multi_agent_standalone.py
+      run: uv run python tests/test_multi_agent_standalone.py
     
     - name: Test Core System
-      run: poetry run python tests/test_solid_architecture.py
+      run: uv run python tests/test_solid_architecture.py
     
     - name: Test with pytest (Full Suite)
-      run: poetry run pytest tests/ -v --cov=viggo --cov-report=xml --cov-report=term-missing --tb=short
+      run: uv run pytest tests/ -v --cov=viggo --cov-report=xml --cov-report=term-missing --tb=short
       continue-on-error: true  # Allow some tests to fail while we fix them
     
     - name: Upload coverage to Codecov
@@ -110,26 +92,19 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Setup uv with Caching
+      uses: ./.github/actions/setup-uv
       with:
         python-version: '3.12'
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    
-    - name: Install dependencies
-      run: poetry install --no-interaction
+        uv-version: 'latest'
+        install-dev-deps: 'true'
     
     - name: Security check with bandit
-      run: poetry run bandit -r viggo/ -f json -o bandit-report.json
+      run: uv run bandit -r viggo/ -f json -o bandit-report.json
       continue-on-error: true  # Allow security check to fail without failing the build
     
     - name: Upload security report
@@ -141,29 +116,22 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [multi-agent-tests, test, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Setup uv with Caching
+      uses: ./.github/actions/setup-uv
       with:
         python-version: '3.12'
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    
-    - name: Install dependencies
-      run: poetry install --no-interaction
+        uv-version: 'latest'
+        install-dev-deps: 'false'
     
     - name: Build package
-      run: poetry build
+      run: uv build
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3

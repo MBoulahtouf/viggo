@@ -17,7 +17,7 @@ Viggo uses a Retrieval-Augmented Generation (RAG) architecture to ensure its ans
 ### Tech Stack
 
 * **Backend:** FastAPI
-* **Dependency Management:** Poetry
+* **Dependency Management:** Poetry + uv (hybrid approach for speed and reproducibility)
 * **Core AI/ML Libraries:** LangChain, Sentence-Transformers (for embeddings)
 * **Vector Search:** FAISS (Facebook AI Similarity Search)
 * **PDF Processing:** pypdf
@@ -31,7 +31,9 @@ Follow these instructions to get a local copy up and running for development and
 ### Prerequisites
 
 * Python 3.12
-* [Poetry](https://python-poetry.org/docs/#installation) installed on your system.
+* [Poetry](https://python-poetry.org/docs/#installation) or [uv](https://docs.astral.sh/uv/getting-started/installation/) installed on your system.
+
+**Note:** For faster dependency installation, we recommend using `uv`. The CI uses `uv` for ultra-fast builds.
 
 ### Installation
 
@@ -41,14 +43,25 @@ Follow these instructions to get a local copy up and running for development and
     cd viggo
     ```
 2.  **Install dependencies:**
-    Poetry will create a virtual environment and install all necessary packages from the `pyproject.toml` file.
+    
+    **Option A: Using uv (Recommended - Faster)**
+    ```sh
+    uv sync --all-extras
+    ```
+    
+    **Option B: Using Poetry**
     ```sh
     poetry install
     ```
 
 ### Running the Application
 
-To run the FastAPI server, use the `poetry run` command:
+**Using uv:**
+```sh
+uv run uvicorn viggo.main:app --reload
+```
+
+**Using Poetry:**
 ```sh
 poetry run uvicorn viggo.main:app --reload
 ```
@@ -84,6 +97,13 @@ For a quick setup, see our [Quick Start Guide](docs/QUICKSTART.md).
    ```
 
 3. Download the spaCy model:
+   
+   **Using uv:**
+   ```bash
+   uv run python -m spacy download en_core_web_sm
+   ```
+   
+   **Using Poetry:**
    ```bash
    poetry run python -m spacy download en_core_web_sm
    ```
@@ -103,6 +123,20 @@ The framework follows SOLID principles and integrates seamlessly with Azure Sear
 ## Testing
 
 Run the comprehensive test suite:
+
+**Using uv:**
+```bash
+# Run all tests
+uv run pytest
+
+# Run multi-agent specific tests
+uv run pytest tests/test_multi_agent_*.py -v
+
+# Run with coverage
+uv run pytest --cov=viggo --cov-report=html
+```
+
+**Using Poetry:**
 ```bash
 # Run all tests
 poetry run pytest
@@ -128,7 +162,8 @@ Viggo includes a comprehensive CI/CD pipeline with GitHub Actions:
 - **Multi-Agent Tests**: Dedicated testing for the multi-agent framework
 - **Quality Checks**: Linting (Ruff), type checking (MyPy), security scanning (Bandit)
 - **Code Coverage**: Automated coverage reporting with Codecov
-- **Dependency Management**: Poetry-based dependency management
+- **Dependency Management**: Ultra-fast uv-based dependency management with Poetry lock file compatibility
+- **Performance**: CI runs 2-3x faster with uv compared to traditional Poetry setup
 
 ## Architecture
 
